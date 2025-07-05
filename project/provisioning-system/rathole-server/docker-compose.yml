@@ -1,0 +1,49 @@
+services:
+  rathole-instance-manager:
+    build:
+      context: .
+      dockerfile: Dockerfile.instance-manager
+    container_name: rathole-instance-manager
+    restart: unless-stopped
+    ports:
+      - "7001:7001"           # Instance Manager API
+      - "10000-10050:10000-10050/tcp"  # Port range for individual Rathole server instances
+      - "30000-30050:30000-30050/tcp"  # Port range for game traffic (adjust as needed)
+      - "30000-30050:30000-30050/udp"  # Port range for game traffic (UDP)
+    environment:
+      # === REQUIRED: Update these values ===
+      - API_TOKEN=${API_TOKEN:470d4ae26987ec5b430196e03ce999602008de2945921b106250efe207939f5f}
+      - PUBLIC_IP=${PUBLIC_IP:-168.231.66.139}
+      
+      # === Instance Manager Configuration ===
+      - SERVER_PORT=7001
+      - RATHOLE_BINARY=/usr/local/bin/rathole
+      - BASE_DATA_DIR=/data/rathole-instances
+      
+      # === Port Allocation Range ===
+      - RATHOLE_PORT_START=10000
+      - RATHOLE_PORT_END=20000
+      
+      # === Flask Settings ===
+      - FLASK_ENV=production
+    volumes:
+      - rathole_instances_data:/data/rathole-instances
+      - rathole_logs:/var/log/rathole
+    networks:
+      - rathole-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  rathole_instances_data:
+    driver: local
+  rathole_logs:
+    driver: local
+
+networks:
+  rathole-net:
+    driver: bridge

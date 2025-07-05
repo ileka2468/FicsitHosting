@@ -1,0 +1,142 @@
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: satisfactory-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: satisfactory_orchestrator
+      POSTGRES_USER: satisfactory
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-scripts:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "5432:5432"
+    networks:
+      - satisfactory-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U satisfactory -d satisfactory_orchestrator"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Redis for caching (optional but recommended)
+  redis:
+    image: redis:7-alpine
+    container_name: satisfactory-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - satisfactory-network
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Spring Boot Orchestrator
+  orchestrator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: satisfactory-orchestrator
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      # Database Configuration
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/satisfactory_orchestrator
+      SPRING_DATASOURCE_USERNAME: satisfactory
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      
+      # Redis Configuration
+      SPRING_REDIS_HOST: redis
+      SPRING_REDIS_PORT: 6379
+      SPRING_REDIS_PASSWORD: ${REDIS_PASSWORD}
+      
+      # Application Configuration
+      APP_PUBLIC_IP: ${PUBLIC_IP}
+      APP_HOST_AGENT_PORT: ${APP_HOST_AGENT_PORT:-8081}
+      APP_RATHOLE_SERVER_HOST: ${RATHOLE_HOST}
+      APP_RATHOLE_SERVER_CONTROL_PORT: 7000
+      APP_RATHOLE_API_TOKEN: ${RATHOLE_TOKEN}
+      
+      # Rathole Instance Manager Configuration
+      RATHOLE_INSTANCE_MANAGER_HOST: ${RATHOLE_INSTANCE_MANAGER_HOST}
+      RATHOLE_INSTANCE_MANAGER_PORT: ${RATHOLE_INSTANCE_MANAGER_PORT}
+      RATHOLE_TOKEN: ${RATHOLE_TOKEN}
+      
+      # Health Check Configuration (loaded from .env file)
+      HEARTBEAT_INTERVAL: ${HEARTBEAT_INTERVAL}
+      HEALTH_CHECK_INTERVAL: ${HEALTH_CHECK_INTERVAL}
+      TIMEOUT_MINUTES: ${TIMEOUT_MINUTES}
+      
+      # JPA Configuration
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      SPRING_JPA_SHOW_SQL: ${SHOW_SQL}
+      
+      # Logging
+      LOGGING_LEVEL_COM_SATISFACTORYHOST_ORCHESTRATOR: ${LOG_LEVEL}
+      
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - satisfactory-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # # Rathole Client for Orchestrator Tunnel
+  # rathole-client:
+  #   image: ghcr.io/rapiz1/rathole:v0.5.0
+  #   container_name: satisfactory-orchestrator-rathole-client
+  #   restart: unless-stopped
+  #   volumes:
+  #     - ./rathole-client/client.toml:/app/client.toml
+  #   command: ["/app/rathole", "/app/client.toml"]
+  #   depends_on:
+  #     - orchestrator
+  #   networks:
+  #     - satisfactory-network
+
+  # pgAdmin for database management (optional)
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: satisfactory-pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@example.com
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}
+      PGADMIN_DISABLE_POSTFIX: "true"
+    ports:
+      - "8090:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      - postgres
+    networks:
+      - satisfactory-network
+    profiles:
+      - "admin"  # Only start with --profile admin
+
+volumes:
+  postgres_data:
+  redis_data:
+  pgadmin_data:
+
+networks:
+  satisfactory-network:
+    driver: bridge
