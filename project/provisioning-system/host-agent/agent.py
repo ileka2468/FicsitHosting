@@ -205,17 +205,12 @@ def create_tunnel_instance(server_id, game_port, beacon_port):
 def get_rathole_client_config_from_manager(server_id):
     """Get Rathole client configuration from the instance manager"""
     try:
-        # Get the container's IP address instead of host agent's IP
-        container_ip = get_container_ip(server_id)
-        if not container_ip:
-            print(f"Could not get container IP for {server_id}, using fallback")
-            container_ip = "127.0.0.1"
-        
         base_url = get_rathole_base_url()
         headers = get_auth_headers()
-        
-        # Build query parameters with container IP
-        params = {'host_ip': container_ip}
+
+        # Use the container hostname so the manager generates a config
+        # that connects directly via Docker's embedded DNS
+        params = {'host_ip': server_id}
         
         # For legacy auth, include token in query params
         if not ACCESS_TOKEN and LEGACY_AUTH_ENABLED:
