@@ -1,13 +1,9 @@
 import React, { useState } from 'react';
 import { ServerCard } from './ServerCard';
 import { ServerAdminPanel } from './ServerAdminPanel';
-import { Plus, Search, Filter, AlertCircle, Loader2 } from 'lucide-react';
+import { Plus, Search, Filter, AlertCircle, Loader2, RefreshCw } from 'lucide-react';
 import { UserServer } from '../types';
 import { useServers } from '../services/hooks';
-
-interface MyServersProps {
-  onCreateServer: () => void;
-}
 
 interface MyServersProps {
   onCreateServer: () => void;
@@ -18,210 +14,202 @@ export const MyServers: React.FC<MyServersProps> = ({ onCreateServer }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
-  // Mock server data - in a real app this would come from an API
-  const mockServers: UserServer[] = [
-    {
-      id: '1',
-      name: 'My Factory World',
-      status: 'online',
-      config: {
-        ram: 8,
-        cpu: 4,
-        maxPlayers: 12,
-        storage: 100,
-        backupFrequency: 'daily',
-        serverLocation: 'us-east'
-      },
-      createdAt: '2024-12-01',
-      lastOnline: '2024-12-15T10:30:00Z',
-      players: {
-        current: 3,
-        max: 12,
-        list: [
-          { id: '1', name: 'Player1', joinedAt: '2024-12-15T09:00:00Z', isOnline: true },
-          { id: '2', name: 'Player2', joinedAt: '2024-12-15T09:15:00Z', isOnline: true },
-          { id: '3', name: 'Player3', joinedAt: '2024-12-15T10:00:00Z', isOnline: true }
-        ]
-      },
-      performance: {
-        uptime: '2d 14h 30m',
-        tps: 59.8,
-        memoryUsage: 65,
-        cpuUsage: 45
-      },
-      saves: [
-        { id: '1', name: 'Main World', size: '2.3 GB', createdAt: '2024-12-01', isActive: true },
-        { id: '2', name: 'Backup Dec 14', size: '2.1 GB', createdAt: '2024-12-14', isActive: false },
-        { id: '3', name: 'Backup Dec 13', size: '2.0 GB', createdAt: '2024-12-13', isActive: false }
-      ],
-      settings: {
-        serverName: 'My Factory World',
-        description: 'A peaceful factory building server',
-        gameMode: 'survival',
-        difficulty: 'normal',
-        pvp: false,
-        whitelist: true,
-        maxPlayers: 12,
-        motd: 'Welcome to our factory!',
-        autoSave: true,
-        backupEnabled: true,
-        mods: [
-          { id: '1', name: 'Industrial Revolution', version: '1.16.2', enabled: true, size: '45 MB' },
-          { id: '2', name: 'Tech Reborn', version: '5.2.0', enabled: true, size: '23 MB' }
-        ]
-      }
-    },
-    {
-      id: '2',
-      name: 'Test Server',
-      status: 'offline',
-      config: {
-        ram: 4,
-        cpu: 2,
-        maxPlayers: 4,
-        storage: 50,
-        backupFrequency: 'weekly',
-        serverLocation: 'us-west'
-      },
-      createdAt: '2024-11-15',
-      lastOnline: '2024-12-10T15:45:00Z',
-      players: {
-        current: 0,
-        max: 4,
-        list: []
-      },
-      performance: {
-        uptime: '0d 0h 0m',
-        tps: 0,
-        memoryUsage: 0,
-        cpuUsage: 0
-      },
-      saves: [
-        { id: '4', name: 'Test World', size: '500 MB', createdAt: '2024-11-15', isActive: true }
-      ],
-      settings: {
-        serverName: 'Test Server',
-        description: 'Testing new configurations',
-        gameMode: 'creative',
-        difficulty: 'peaceful',
-        pvp: false,
-        whitelist: false,
-        maxPlayers: 4,
-        motd: 'Test server - expect downtime',
-        autoSave: true,
-        backupEnabled: false,
-        mods: []
-      }
-    }
-  ];
+  const {
+    servers,
+    loading,
+    error,
+    refreshServers,
+    startServer,
+    stopServer,
+    restartServer,
+    deleteServer,
+  } = useServers();
 
-  const filteredServers = mockServers.filter(server => {
+  const filteredServers = servers.filter(server => {
     const matchesSearch = server.name.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'all' || server.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
 
+  const handleServerAction = async (serverId: string, action: string) => {
+    try {
+      switch (action) {
+        case 'start':
+          await startServer(serverId);
+          break;
+        case 'stop':
+          await stopServer(serverId);
+          break;
+        case 'restart':
+          await restartServer(serverId);
+          break;
+        case 'delete':
+          if (window.confirm('Are you sure you want to delete this server? This action cannot be undone.')) {
+            await deleteServer(serverId);
+          }
+          break;
+        default:
+          console.warn('Unknown action:', action);
+      }
+    } catch (error) {
+      console.error(`Failed to ${action} server:`, error);
+    }
+  };
+
   if (selectedServer) {
     return (
-      <ServerAdminPanel 
+      <ServerAdminPanel
         server={selectedServer}
         onBack={() => setSelectedServer(null)}
-        onServerUpdate={(updatedServer: UserServer) => {
+        onServerUpdate={(updatedServer) => {
           setSelectedServer(updatedServer);
-          // In a real app, update the server list here
+          refreshServers();
         }}
       />
     );
   }
 
   return (
-    <div className="min-h-screen relative overflow-hidden">
-      {/* Background */}
-      <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900" />
-      <div className="absolute inset-0 opacity-20">
-        <div className="w-full h-full bg-[radial-gradient(circle_at_50%_50%,rgba(120,119,198,0.1),transparent_70%)]" />
-      </div>
-      
-      <main className="container mx-auto px-4 py-8 relative z-10">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold text-white mb-4">My Servers</h1>
-          <p className="text-white/70 text-lg">Manage and monitor your Factorio servers</p>
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">My Servers</h1>
+          <p className="text-gray-600 mt-1">Manage your Satisfactory game servers</p>
         </div>
-
-        {/* Controls */}
-        <div className="flex flex-col sm:flex-row gap-4 mb-8">
-          {/* Search */}
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-white/50" />
-            <input
-              type="text"
-              placeholder="Search servers..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-3 backdrop-blur-xl bg-white/10 border border-white/20 rounded-2xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-cyan-400/50 focus:border-cyan-400/50"
-            />
-          </div>
-
-          {/* Filter */}
-          <div className="relative">
-            <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-white/50" />
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="pl-10 pr-8 py-3 backdrop-blur-xl bg-white/10 border border-white/20 rounded-2xl text-white focus:outline-none focus:ring-2 focus:ring-cyan-400/50 focus:border-cyan-400/50 appearance-none cursor-pointer"
-            >
-              <option value="all">All Status</option>
-              <option value="online">Online</option>
-              <option value="offline">Offline</option>
-              <option value="starting">Starting</option>
-              <option value="stopping">Stopping</option>
-            </select>
-          </div>
-
-          {/* Create Server Button */}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={refreshServers}
+            disabled={loading}
+            className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
           <button
             onClick={onCreateServer}
-            className="flex items-center space-x-2 px-6 py-3 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-semibold rounded-2xl transition-all duration-300 hover:scale-105 shadow-lg shadow-cyan-400/25"
+            className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
           >
-            <Plus className="w-5 h-5" />
-            <span>Create Server</span>
+            <Plus className="w-4 h-4" />
+            Create Server
           </button>
         </div>
+      </div>
 
-        {/* Server Grid */}
-        {filteredServers.length === 0 ? (
-          <div className="text-center py-16">
-            <div className="backdrop-blur-xl bg-white/10 rounded-3xl p-12 border border-white/20 max-w-md mx-auto">
-              <h3 className="text-2xl font-bold text-white mb-4">No Servers Found</h3>
-              <p className="text-white/70 mb-6">
-                {searchTerm || statusFilter !== 'all' 
-                  ? 'No servers match your current filters.' 
-                  : 'You haven\'t created any servers yet.'
-                }
-              </p>
-              {!searchTerm && statusFilter === 'all' && (
-                <button
-                  onClick={onCreateServer}
-                  className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-semibold px-6 py-3 rounded-2xl transition-all duration-300 hover:scale-105"
-                >
-                  Create Your First Server
-                </button>
-              )}
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-5 h-5 text-red-600" />
+            <span className="text-red-800 font-medium">Error</span>
+          </div>
+          <p className="text-red-700 mt-1">{error}</p>
+        </div>
+      )}
+
+      <div className="flex flex-col sm:flex-row gap-4">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+          <input
+            type="text"
+            placeholder="Search servers..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+        </div>
+        <div className="relative">
+          <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="pl-10 pr-8 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white min-w-[140px]"
+          >
+            <option value="all">All Status</option>
+            <option value="online">Online</option>
+            <option value="offline">Offline</option>
+            <option value="starting">Starting</option>
+            <option value="stopping">Stopping</option>
+            <option value="restarting">Restarting</option>
+            <option value="error">Error</option>
+          </select>
+        </div>
+      </div>
+
+      {loading && servers.length === 0 && (
+        <div className="flex items-center justify-center py-12">
+          <div className="flex items-center gap-3">
+            <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
+            <span className="text-gray-600">Loading servers...</span>
+          </div>
+        </div>
+      )}
+
+      {!loading && servers.length === 0 && !error && (
+        <div className="text-center py-12">
+          <div className="max-w-md mx-auto">
+            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Plus className="w-8 h-8 text-gray-400" />
             </div>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">No servers yet</h3>
+            <p className="text-gray-600 mb-6">
+              Create your first Satisfactory server to get started with hosting your factory world.
+            </p>
+            <button
+              onClick={onCreateServer}
+              className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 inline-flex items-center gap-2"
+            >
+              <Plus className="w-5 h-5" />
+              Create Your First Server
+            </button>
           </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredServers.map((server) => (
-              <ServerCard
-                key={server.id}
-                server={server}
-                onManage={() => setSelectedServer(server)}
-              />
-            ))}
+        </div>
+      )}
+
+      {!loading && servers.length > 0 && filteredServers.length === 0 && (
+        <div className="text-center py-12">
+          <div className="max-w-md mx-auto">
+            <Search className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 mb-2">No servers found</h3>
+            <p className="text-gray-600">
+              No servers match your current search criteria. Try adjusting your search or filter settings.
+            </p>
           </div>
-        )}
-      </main>
+        </div>
+      )}
+
+      {filteredServers.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredServers.map((server) => (
+            <ServerCard
+              key={server.id}
+              server={server}
+              onManage={() => setSelectedServer(server)}
+              onAction={(action) => handleServerAction(server.id, action)}
+            />
+          ))}
+        </div>
+      )}
+
+      {servers.length > 0 && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-6 bg-gray-50 rounded-lg">
+          <div className="text-center">
+            <div className="text-2xl font-bold text-gray-900">{servers.length}</div>
+            <div className="text-sm text-gray-600">Total Servers</div>
+          </div>
+          <div className="text-center">
+            <div className="text-2xl font-bold text-green-600">{servers.filter(s => s.status === 'online').length}</div>
+            <div className="text-sm text-gray-600">Online</div>
+          </div>
+          <div className="text-center">
+            <div className="text-2xl font-bold text-gray-600">{servers.filter(s => s.status === 'offline').length}</div>
+            <div className="text-sm text-gray-600">Offline</div>
+          </div>
+          <div className="text-center">
+            <div className="text-2xl font-bold text-blue-600">{servers.reduce((total, server) => total + server.players.current, 0)}</div>
+            <div className="text-sm text-gray-600">Active Players</div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
+

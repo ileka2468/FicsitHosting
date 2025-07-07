@@ -15,9 +15,10 @@ import { UserServer } from '../types';
 interface ServerCardProps {
   server: UserServer;
   onManage: () => void;
+  onAction?: (action: 'start' | 'stop' | 'restart') => void;
 }
 
-export const ServerCard: React.FC<ServerCardProps> = ({ server, onManage }) => {
+export const ServerCard: React.FC<ServerCardProps> = ({ server, onManage, onAction }) => {
   const getStatusIcon = () => {
     switch (server.status) {
       case 'online':
@@ -56,8 +57,11 @@ export const ServerCard: React.FC<ServerCardProps> = ({ server, onManage }) => {
 
   const handleServerAction = (action: 'start' | 'stop' | 'restart', e: React.MouseEvent) => {
     e.stopPropagation();
-    // In a real app, this would make API calls
-    console.log(`${action} server ${server.id}`);
+    if (onAction) {
+      onAction(action);
+    } else {
+      console.log(`${action} server ${server.id}`);
+    }
   };
 
   return (

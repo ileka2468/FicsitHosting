@@ -18,30 +18,67 @@ public class NodeController {
     private NodeSchedulerService nodeSchedulerService;
     
     /**
-     * Get all online nodes
+     * Get all nodes
      */
     @GetMapping
-    public ResponseEntity<List<Node>> getOnlineNodes() {
-        List<Node> nodes = nodeSchedulerService.getOnlineNodes();
+    public ResponseEntity<List<Node>> getNodes() {
+        List<Node> nodes = nodeSchedulerService.getAllNodes();
         return ResponseEntity.ok(nodes);
     }
-    
+
+    /**
+     * Get node by id
+     */
+    @GetMapping("/{nodeId}")
+    public ResponseEntity<Node> getNode(@PathVariable String nodeId) {
+        Node node = nodeSchedulerService.getNodeById(nodeId);
+        if (node != null) {
+            return ResponseEntity.ok(node);
+        }
+        return ResponseEntity.notFound().build();
+    }
+
     /**
      * Register a new node or update existing one
      */
-    @PostMapping("/register")
+    @PostMapping
     public ResponseEntity<Node> registerNode(@RequestBody Map<String, Object> request) {
         try {
             String nodeId = (String) request.get("nodeId");
             String hostname = (String) request.get("hostname");
             String ipAddress = (String) request.get("ipAddress");
             Integer maxServers = (Integer) request.get("maxServers");
-            
+
             Node node = nodeSchedulerService.registerNode(nodeId, hostname, ipAddress, maxServers);
             return ResponseEntity.ok(node);
         } catch (Exception e) {
             return ResponseEntity.badRequest().build();
         }
+    }
+
+    /**
+     * Update existing node
+     */
+    @PutMapping("/{nodeId}")
+    public ResponseEntity<Node> updateNode(@PathVariable String nodeId, @RequestBody Map<String, Object> request) {
+        try {
+            String hostname = (String) request.get("hostname");
+            String ipAddress = (String) request.get("ipAddress");
+            Integer maxServers = request.get("maxServers") != null ? ((Number) request.get("maxServers")).intValue() : null;
+            Node node = nodeSchedulerService.updateNode(nodeId, hostname, ipAddress, maxServers);
+            return ResponseEntity.ok(node);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().build();
+        }
+    }
+
+    /**
+     * Delete node
+     */
+    @DeleteMapping("/{nodeId}")
+    public ResponseEntity<?> deleteNode(@PathVariable String nodeId) {
+        nodeSchedulerService.deleteNode(nodeId);
+        return ResponseEntity.ok().build();
     }
     
     /**

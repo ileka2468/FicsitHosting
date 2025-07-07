@@ -22,7 +22,7 @@ public class GameServerController {
     /**
      * Provision a new Satisfactory server
      */
-    @PostMapping("/provision")
+    @PostMapping
     public ResponseEntity<ProvisionServerResponse> provisionServer(
             @RequestHeader("Authorization") String authHeader,
             @RequestBody ProvisionServerRequest request) {
@@ -35,6 +35,30 @@ public class GameServerController {
                 "Failed to provision server: " + e.getMessage()
             );
             return ResponseEntity.badRequest().body(errorResponse);
+        }
+    }
+
+    /**
+     * Legacy endpoint for provisioning
+     */
+    @PostMapping("/provision")
+    public ResponseEntity<ProvisionServerResponse> provisionServerLegacy(
+            @RequestHeader("Authorization") String authHeader,
+            @RequestBody ProvisionServerRequest request) {
+        return provisionServer(authHeader, request);
+    }
+
+    /**
+     * Get all servers for the authenticated user
+     */
+    @GetMapping
+    public ResponseEntity<List<GameServer>> getServers(
+            @RequestHeader("Authorization") String authHeader) {
+        try {
+            List<GameServer> servers = provisioningService.getServersForCurrentUser(authHeader);
+            return ResponseEntity.ok(servers);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().build();
         }
     }
     
