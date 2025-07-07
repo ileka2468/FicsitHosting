@@ -189,4 +189,40 @@ public class GameServerController {
             return ResponseEntity.badRequest().body(errorResponse);
         }
     }
+    
+    /**
+     * Get server data information
+     */
+    @GetMapping("/{serverId}/data-info")
+    public ResponseEntity<Map<String, Object>> getServerDataInfo(
+            @RequestHeader("Authorization") String authHeader,
+            @PathVariable String serverId) {
+        try {
+            Map<String, Object> dataInfo = provisioningService.getServerDataInfo(authHeader, serverId);
+            return ResponseEntity.ok(dataInfo);
+        } catch (Exception e) {
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("status", "error");
+            errorResponse.put("message", e.getMessage());
+            return ResponseEntity.badRequest().body(errorResponse);
+        }
+    }
+    
+    /**
+     * Get data summary for all servers of a user
+     */
+    @GetMapping("/user/{userId}/data-summary")
+    public ResponseEntity<Map<String, Object>> getUserServersDataSummary(
+            @RequestHeader("Authorization") String authHeader,
+            @PathVariable String userId) {
+        try {
+            Map<String, Object> summary = provisioningService.getUserServersDataSummary(authHeader, userId);
+            return ResponseEntity.ok(summary);
+        } catch (Exception e) {
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("status", "error");
+            errorResponse.put("message", e.getMessage());
+            return ResponseEntity.badRequest().body(errorResponse);
+        }
+    }
 }

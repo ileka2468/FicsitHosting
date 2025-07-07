@@ -1,18 +1,45 @@
-import React, { useState } from 'react';
-import { User, Settings, Server, CreditCard, LogOut, ChevronDown, Crown } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { User, Settings, Server, CreditCard, LogOut, ChevronDown, Crown, Shield } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { User as UserType } from '../types';
+import { API_ENDPOINTS } from '../config/api';
 
 interface UserMenuProps {
   user: UserType;
   onLogout: () => void;
-  onSectionChange: (section: 'home' | 'configurator' | 'pricing') => void;
+  onSectionChange: (section: 'home' | 'configurator' | 'pricing' | 'admin') => void;
   onMenuToggle: (isOpen: boolean) => void;
 }
 
 export const UserMenu: React.FC<UserMenuProps> = ({ user, onLogout, onSectionChange, onMenuToggle }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [buttonRef, setButtonRef] = useState<HTMLButtonElement | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    checkAdminAccess();
+  }, []);
+
+  const checkAdminAccess = async () => {
+    try {
+      const token = localStorage.getItem('satisfactory_auth_token');
+      if (!token) return;
+
+      const response = await fetch(API_ENDPOINTS.auth.validate, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (response.ok) {
+        const userInfo = await response.json();
+        const hasAdminRole = userInfo.roles?.includes('ADMIN') || userInfo.roles?.includes('SERVICE_ACCOUNT');
+        setIsAdmin(hasAdminRole);
+      }
+    } catch (error) {
+      console.error('Error checking admin access:', error);
+    }
+  };
 
   const handleMenuToggle = () => {
     const newState = !isOpen;
@@ -184,6 +211,23 @@ export const UserMenu: React.FC<UserMenuProps> = ({ user, onLogout, onSectionCha
                   <p className="text-xs text-white/60">Profile & preferences</p>
                 </div>
               </button>
+
+              {/* Admin Panel - Only show for admins */}
+              {isAdmin && (
+                <button
+                  onClick={() => {
+                    onSectionChange('admin');
+                    handleMenuClose();
+                  }}
+                  className="w-full flex items-center space-x-3 px-4 py-3 text-orange-400 hover:text-orange-300 hover:bg-orange-500/10 transition-all"
+                >
+                  <Shield className="w-5 h-5" />
+                  <div className="text-left">
+                    <p className="font-medium">Admin Panel</p>
+                    <p className="text-xs text-orange-300/60">System management</p>
+                  </div>
+                </button>
+              )}
             </div>
 
             {/* Logout */}

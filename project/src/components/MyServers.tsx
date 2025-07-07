@@ -30,7 +30,8 @@ export const MyServers: React.FC<MyServersProps> = ({ onCreateServer }) => {
         maxPlayers: 12,
         storage: 100,
         backupFrequency: 'daily',
-        serverLocation: 'us-east'
+        serverLocation: 'us-east',
+        'serverSize': 'premium'
       },
       createdAt: '2024-12-01',
       lastOnline: '2024-12-15T10:30:00Z',
@@ -78,6 +79,7 @@ export const MyServers: React.FC<MyServersProps> = ({ onCreateServer }) => {
       config: {
         ram: 4,
         cpu: 2,
+        serverSize: 'starter',
         maxPlayers: 4,
         storage: 50,
         backupFrequency: 'weekly',
@@ -135,18 +137,17 @@ export const MyServers: React.FC<MyServersProps> = ({ onCreateServer }) => {
   }
 
   return (
-    <div className="min-h-screen relative overflow-hidden">
-      {/* Background */}
-      <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900" />
-      <div className="absolute inset-0 opacity-20">
-        <div className="w-full h-full bg-[radial-gradient(circle_at_50%_50%,rgba(120,119,198,0.1),transparent_70%)]" />
+    <div className="min-h-screen bg-slate-900">
+      {/* Background pattern similar to admin components */}
+      <div className="absolute inset-0 opacity-10">
+        <div className="w-full h-full bg-[radial-gradient(circle_at_50%_50%,rgba(34,211,238,0.1),transparent_70%)]" />
       </div>
       
       <main className="container mx-auto px-4 py-8 relative z-10">
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-4xl font-bold text-white mb-4">My Servers</h1>
-          <p className="text-white/70 text-lg">Manage and monitor your Factorio servers</p>
+          <p className="text-slate-400 text-lg">Manage and monitor your Satisfactory servers</p>
         </div>
 
         {/* Controls */}
@@ -159,7 +160,7 @@ export const MyServers: React.FC<MyServersProps> = ({ onCreateServer }) => {
               placeholder="Search servers..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-3 backdrop-blur-xl bg-white/10 border border-white/20 rounded-2xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-cyan-400/50 focus:border-cyan-400/50"
+              className="w-full pl-10 pr-4 py-3 backdrop-blur-sm bg-slate-800/50 border border-slate-700 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50"
             />
           </div>
 
@@ -169,7 +170,7 @@ export const MyServers: React.FC<MyServersProps> = ({ onCreateServer }) => {
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="pl-10 pr-8 py-3 backdrop-blur-xl bg-white/10 border border-white/20 rounded-2xl text-white focus:outline-none focus:ring-2 focus:ring-cyan-400/50 focus:border-cyan-400/50 appearance-none cursor-pointer"
+              className="pl-10 pr-8 py-3 backdrop-blur-sm bg-slate-800/50 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 appearance-none cursor-pointer"
             >
               <option value="all">All Status</option>
               <option value="online">Online</option>
@@ -182,7 +183,7 @@ export const MyServers: React.FC<MyServersProps> = ({ onCreateServer }) => {
           {/* Create Server Button */}
           <button
             onClick={onCreateServer}
-            className="flex items-center space-x-2 px-6 py-3 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-semibold rounded-2xl transition-all duration-300 hover:scale-105 shadow-lg shadow-cyan-400/25"
+            className="flex items-center space-x-2 px-6 py-3 bg-cyan-600 hover:bg-cyan-700 text-white font-semibold rounded-lg transition-colors"
           >
             <Plus className="w-5 h-5" />
             <span>Create Server</span>
@@ -192,9 +193,9 @@ export const MyServers: React.FC<MyServersProps> = ({ onCreateServer }) => {
         {/* Server Grid */}
         {filteredServers.length === 0 ? (
           <div className="text-center py-16">
-            <div className="backdrop-blur-xl bg-white/10 rounded-3xl p-12 border border-white/20 max-w-md mx-auto">
+            <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl p-12 border border-slate-700 max-w-md mx-auto">
               <h3 className="text-2xl font-bold text-white mb-4">No Servers Found</h3>
-              <p className="text-white/70 mb-6">
+              <p className="text-slate-400 mb-6">
                 {searchTerm || statusFilter !== 'all' 
                   ? 'No servers match your current filters.' 
                   : 'You haven\'t created any servers yet.'
@@ -203,7 +204,7 @@ export const MyServers: React.FC<MyServersProps> = ({ onCreateServer }) => {
               {!searchTerm && statusFilter === 'all' && (
                 <button
                   onClick={onCreateServer}
-                  className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-semibold px-6 py-3 rounded-2xl transition-all duration-300 hover:scale-105"
+                  className="bg-cyan-600 hover:bg-cyan-700 text-white font-semibold px-6 py-3 rounded-lg transition-colors"
                 >
                   Create Your First Server
                 </button>

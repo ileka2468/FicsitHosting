@@ -12,13 +12,15 @@ import { PricingSection } from './components/PricingSection';
 import { Footer } from './components/Footer';
 import { AuthPage } from './components/AuthPage';
 import { EmailVerification } from './components/EmailVerification';
-import { MyServers } from './components/MyServers';
+import { MyS } from './components/MyServers';
+import { AdminDashboard } from './components/AdminDashboard';
 import { ServerConfig, PresetConfig, User } from './types';
 import { UserInfo } from './services/authService';
 import { calculatePerformanceMetrics, calculateCost } from './utils/calculations';
+import { API_ENDPOINTS } from './config/api';
 
 function App() {
-  const [currentSection, setCurrentSection] = useState<'home' | 'configurator' | 'pricing' | 'servers'>('home');
+  const [currentSection, setCurrentSection] = useState<'home' | 'configurator' | 'pricing' | 'servers' | 'admin'>('home');
   const [config, setConfig] = useState<ServerConfig>({
     ram: 6,
     cpu: 3,
@@ -69,7 +71,7 @@ function App() {
       if (token) {
         try {
           // Validate the existing token by making a test API call
-          const response = await fetch('/api/auth/validate', {
+          const response = await fetch(API_ENDPOINTS.auth.validate, {
             method: 'GET',
             headers: {
               'Authorization': `Bearer ${token}`,
@@ -231,6 +233,8 @@ function App() {
         return <PricingSection onGetStarted={handleGetStarted} onPlanSelected={handlePlanSelected} />;
       case 'servers':
         return <MyServers onCreateServer={handleGetStarted} />;
+      case 'admin':
+        return user ? <AdminDashboard user={user} /> : null;
       default:
         return null;
     }

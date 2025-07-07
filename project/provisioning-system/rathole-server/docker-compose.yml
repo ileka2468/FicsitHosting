@@ -6,31 +6,47 @@ services:
     container_name: rathole-instance-manager
     restart: unless-stopped
     ports:
-      - "7001:7001"           # Instance Manager API
-      - "10000-10050:10000-10050/tcp"  # Port range for individual Rathole server instances
-      - "30000-30050:30000-30050/tcp"  # Port range for game traffic (adjust as needed)
-      - "30000-30050:30000-30050/udp"  # Port range for game traffic (UDP)
+      - "7001:7001"           # Instance Manager API (HTTP)
+      - "443:443"             # Instance Manager API (HTTPS)
+      - "20000-20100:20000-20100/tcp"  # Port range for individual Rathole server instances
+      - "40000-40100:40000-40100/tcp"  # Port range for tunneled game traffic (completely different from real game ports)
+      - "40000-40100:40000-40100/udp"  # Port range for tunneled game traffic (UDP)
     environment:
       # === REQUIRED: Update these values ===
-      - API_TOKEN=${API_TOKEN:470d4ae26987ec5b430196e03ce999602008de2945921b106250efe207939f5f}
-      - PUBLIC_IP=${PUBLIC_IP:-168.231.66.139}
+      - PUBLIC_HOST_IP=192.168.20.100  #  Actual host/LAN IP
+      - PUBLIC_IP=${PUBLIC_IP:-0.0.0.0}  # For server binding (optional, defaults to 0.0.0.0)
+      - INTERNAL_SERVER_HOST=${INTERNAL_SERVER_HOST:-rathole-instance-manager}
+      # === Security Configuration ===
+      - AUTH_SERVICE_URL=${AUTH_SERVICE_URL:-http://auth-service:8081}
+      - USE_HTTPS=${USE_HTTPS:-false}
+      - SSL_CERT_PATH=/certs/server.crt
+      - SSL_KEY_PATH=/certs/server.key
+      
+      # === Legacy Auth (DISABLED) ===
+      - LEGACY_AUTH_ENABLED=false
       
       # === Instance Manager Configuration ===
       - SERVER_PORT=7001
+      - HTTPS_PORT=443
       - RATHOLE_BINARY=/usr/local/bin/rathole
       - BASE_DATA_DIR=/data/rathole-instances
       
-      # === Port Allocation Range ===
-      - RATHOLE_PORT_START=10000
-      - RATHOLE_PORT_END=20000
+      # === Port Allocation Ranges ===
+      - RATHOLE_PORT_START=20000
+      - RATHOLE_PORT_END=20100
+      - GAME_PORT_START=40000
+      - GAME_PORT_END=40100
       
       # === Flask Settings ===
       - FLASK_ENV=production
     volumes:
       - rathole_instances_data:/data/rathole-instances
       - rathole_logs:/var/log/rathole
+      - ./certs:/certs:ro        # SSL certificates (optional, create directory if using HTTPS)
     networks:
       - rathole-net
+      - auth-service_auth-network                # Network for auth service communication
+      - orchestrator_satisfactory-network      # Network for orchestrator communication
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:7001/health"]
       interval: 30s
@@ -47,3 +63,7 @@ volumes:
 networks:
   rathole-net:
     driver: bridge
+  auth-service_auth-network:
+    external: true          
+  orchestrator_satisfactory-network:
+    external: true           
