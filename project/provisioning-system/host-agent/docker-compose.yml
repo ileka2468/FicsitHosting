@@ -23,8 +23,11 @@ services:
       - "host.docker.internal:host-gateway"
     networks:
       - orchestrator_satisfactory-network
+      - satis_network
     restart: unless-stopped
 
 networks:
   orchestrator_satisfactory-network:
+    external: true
+  satis_network:
     external: true
