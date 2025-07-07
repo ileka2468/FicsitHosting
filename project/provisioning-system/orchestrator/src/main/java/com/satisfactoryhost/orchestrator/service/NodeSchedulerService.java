@@ -59,11 +59,11 @@ public class NodeSchedulerService {
             Node node = nodeOpt.get();
             
             // Debug logging
-            System.out.println("Before update - Node: " + nodeId);
-            System.out.println("  Current lastHeartbeat: " + node.getLastHeartbeat());
-            System.out.println("  Current CPU: " + node.getCpuUsage());
-            System.out.println("  Current Memory: " + node.getMemoryUsage());
-            System.out.println("  Current Disk: " + node.getDiskUsage());
+            // System.out.println("Before update - Node: " + nodeId);
+            // System.out.println("  Current lastHeartbeat: " + node.getLastHeartbeat());
+            // System.out.println("  Current CPU: " + node.getCpuUsage());
+            // System.out.println("  Current Memory: " + node.getMemoryUsage());
+            // System.out.println("  Current Disk: " + node.getDiskUsage());
             
             node.setCpuUsage(cpuUsage);
             node.setMemoryUsage(memoryUsage);
@@ -79,12 +79,12 @@ public class NodeSchedulerService {
             node.setCurrentServers(activeServers.intValue());
             
             // Debug logging
-            System.out.println("After update - Node: " + nodeId);
-            System.out.println("  New lastHeartbeat: " + newHeartbeat);
-            System.out.println("  New CPU: " + cpuUsage);
-            System.out.println("  New Memory: " + memoryUsage);
-            System.out.println("  New Disk: " + diskUsage);
-            System.out.println("  Active servers: " + activeServers);
+            // System.out.println("After update - Node: " + nodeId);
+            // System.out.println("  New lastHeartbeat: " + newHeartbeat);
+            // System.out.println("  New CPU: " + cpuUsage);
+            // System.out.println("  New Memory: " + memoryUsage);
+            // System.out.println("  New Disk: " + diskUsage);
+            // System.out.println("  Active servers: " + activeServers);
             
             Node savedNode = nodeRepository.save(node);
             System.out.println("Saved node - lastHeartbeat: " + savedNode.getLastHeartbeat());
@@ -106,8 +106,12 @@ public class NodeSchedulerService {
     public Node registerNode(String nodeId, String hostname, String ipAddress, Integer maxServers) {
         Optional<Node> existingNode = nodeRepository.findByNodeId(nodeId);
         
-        if (existingNode.isPresent()) {
+        if (existingNode.isPresent()) { 
             Node node = existingNode.get();
+            // Check if IP address has changed and update if necessary
+            if (!ipAddress.equals(node.getIpAddress())) {
+                node.setIpAddress(ipAddress);
+            }
             node.setStatus(Node.NodeStatus.ONLINE);
             return nodeRepository.save(node);
         } else {

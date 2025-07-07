@@ -64,7 +64,11 @@ public class PortAllocationService {
             allocation.setReleasedAt(ZonedDateTime.now(ZoneOffset.UTC));
         }
         
+        // Save the status update first
         portAllocationRepository.saveAll(allocations);
+        
+        // Then delete the port allocation records to avoid foreign key constraint
+        portAllocationRepository.deleteAll(allocations);
     }
     
     /**

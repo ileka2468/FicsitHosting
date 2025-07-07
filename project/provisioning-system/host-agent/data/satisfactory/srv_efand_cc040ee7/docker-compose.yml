@@ -1,0 +1,35 @@
+networks:
+  satis_network:
+    external: true
+services:
+  srv_efand_cc040ee7:
+    container_name: srv_efand_cc040ee7
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 8G
+        reservations:
+          memory: 4G
+    environment:
+      AUTOSAVENUM: '5'
+      MAXPLAYERS: '20'
+      PGID: '1000'
+      PUID: '1000'
+      SERVERGAMEPORT: '30018'
+      SERVERMESSAGINGPORT: '30019'
+      SERVER_PASSWORD: '1234'
+      SKIPUPDATE: 'false'
+      STEAMBETA: 'false'
+      TIMEOUT: '30'
+    hostname: srv_efand_cc040ee7
+    image: wolveix/satisfactory-server:latest
+    networks:
+    - satis_network
+    ports:
+    - 30018:30018/udp
+    - 30018:30018/tcp
+    - 30019:30019/tcp
+    restart: unless-stopped
+    volumes:
+    - ./data/srv_efand_cc040ee7:/config

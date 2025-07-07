@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, g
 import docker
 import psutil
 import os
@@ -31,6 +31,11 @@ RATHOLE_INSTANCE_MANAGER_HOST = os.environ.get('RATHOLE_INSTANCE_MANAGER_HOST', 
 RATHOLE_INSTANCE_MANAGER_PORT = os.environ.get('RATHOLE_INSTANCE_MANAGER_PORT', '7001')
 RATHOLE_TOKEN = os.environ.get('RATHOLE_TOKEN', 'your-api-control-token-here')
 RATHOLE_CLIENT_BINARY = os.environ.get('RATHOLE_CLIENT_BINARY', '/usr/local/bin/rathole')
+
+# Authentication Configuration
+USE_HTTPS_RATHOLE = os.environ.get('USE_HTTPS_RATHOLE', 'false').lower() == 'true'
+ACCESS_TOKEN = os.environ.get('ACCESS_TOKEN', None)  # Access token from orchestrator
+LEGACY_AUTH_ENABLED = os.environ.get('LEGACY_AUTH_ENABLED', 'true').lower() == 'true'
 
 # Heartbeat Configuration (configurable via environment variables)
 HEARTBEAT_INTERVAL = int(os.environ.get('HEARTBEAT_INTERVAL', '60'))  # seconds
@@ -65,6 +70,12 @@ def generate_satisfactory_config(server_name, max_players, game_port, beacon_por
 
 def generate_docker_compose_config(server_id, server_name, game_port, beacon_port, ram_allocation, cpu_allocation, max_players, server_password, environment_vars):
     """Generate Docker Compose configuration for a Satisfactory server"""
+    
+    # Validate and set defaults for resource allocations
+    if ram_allocation is None or ram_allocation <= 0:
+        ram_allocation = 4  # Default to 4GB
+    if cpu_allocation is None or cpu_allocation <= 0:
+        cpu_allocation = 2  # Default to 2 CPU cores
     
     # Merge environment variables with defaults
     env_vars = {
@@ -128,24 +139,60 @@ def generate_docker_compose_config(server_id, server_name, game_port, beacon_por
     
     return compose_config
 
+def get_auth_headers():
+    """Get authentication headers for rathole manager API calls"""
+    headers = {'Content-Type': 'application/json'}
+    
+    # Check if we have an access token from the request (priority)
+    request_token = None
+    if hasattr(g, 'access_token'):
+        request_token = g.access_token
+    
+    # Use request token, fallback to environment ACCESS_TOKEN, then legacy
+    if request_token:
+        headers['Authorization'] = f'Bearer {request_token}'
+    elif ACCESS_TOKEN:
+        headers['Authorization'] = f'Bearer {ACCESS_TOKEN}'
+    elif LEGACY_AUTH_ENABLED and RATHOLE_TOKEN:
+        headers['X-API-Token'] = RATHOLE_TOKEN
+    
+    return headers
+
+def get_rathole_base_url():
+    """Get the base URL for rathole instance manager"""
+    protocol = 'https' if USE_HTTPS_RATHOLE else 'http'
+    port = '443' if USE_HTTPS_RATHOLE else RATHOLE_INSTANCE_MANAGER_PORT
+    return f"{protocol}://{RATHOLE_INSTANCE_MANAGER_HOST}:{port}"
+
 def create_tunnel_instance(server_id, game_port, beacon_port):
     """Create a tunnel instance on the rathole instance manager"""
     try:
+        base_url = get_rathole_base_url()
+        headers = get_auth_headers()
+        
+        # Use modern API format (no token in payload)
+        payload = {
+            'server_id': server_id,
+            'game_port': game_port,
+            'query_port': beacon_port
+        }
+        
+        # For legacy auth, include token in payload
+        if not ACCESS_TOKEN and LEGACY_AUTH_ENABLED:
+            payload['token'] = RATHOLE_TOKEN
+        
         response = requests.post(
-            f'http://{RATHOLE_INSTANCE_MANAGER_HOST}:{RATHOLE_INSTANCE_MANAGER_PORT}/api/instances',
-            json={
-                'token': RATHOLE_TOKEN,
-                'server_id': server_id,
-                'game_port': game_port,
-                'beacon_port': beacon_port
-            },
-            timeout=10
+            f'{base_url}/api/instances',
+            json=payload,
+            headers=headers,
+            timeout=10,
+            verify=False if USE_HTTPS_RATHOLE else True  # Skip SSL verification for self-signed certs
         )
         
         if response.status_code == 200:
             data = response.json()
             if data.get('status') == 'success':
-                print(f"✓ Created tunnel instance for {server_id}")
+                print(f"✓ Created tunnel instance for {server_id} using {'access token' if ACCESS_TOKEN else 'legacy auth'}")
                 return True
         
         print(f"Failed to create tunnel instance for {server_id}: {response.status_code} - {response.text}")
@@ -158,25 +205,35 @@ def create_tunnel_instance(server_id, game_port, beacon_port):
 def get_rathole_client_config_from_manager(server_id):
     """Get Rathole client configuration from the instance manager"""
     try:
-        # Get local IP address
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
-        local_ip = s.getsockname()[0]
-        s.close()
+        # Get the container's IP address instead of host agent's IP
+        container_ip = get_container_ip(server_id)
+        if not container_ip:
+            print(f"Could not get container IP for {server_id}, using fallback")
+            container_ip = "127.0.0.1"
+        
+        base_url = get_rathole_base_url()
+        headers = get_auth_headers()
+        
+        # Build query parameters with container IP
+        params = {'host_ip': container_ip}
+        
+        # For legacy auth, include token in query params
+        if not ACCESS_TOKEN and LEGACY_AUTH_ENABLED:
+            params['token'] = RATHOLE_TOKEN
         
         # Request client config from instance manager
         response = requests.get(
-            f'http://{RATHOLE_INSTANCE_MANAGER_HOST}:{RATHOLE_INSTANCE_MANAGER_PORT}/api/instances/{server_id}/client-config',
-            params={
-                'token': RATHOLE_TOKEN,
-                'host_ip': local_ip
-            },
-            timeout=10
+            f'{base_url}/api/instances/{server_id}/client-config',
+            params=params,
+            headers=headers,
+            timeout=10,
+            verify=False if USE_HTTPS_RATHOLE else True  # Skip SSL verification for self-signed certs
         )
         
         if response.status_code == 200:
             data = response.json()
             if data.get('status') == 'success':
+                print(f"✓ Retrieved client config for {server_id} using {'access token' if ACCESS_TOKEN else 'legacy auth'}")
                 return data.get('config')
         
         print(f"Failed to get client config for {server_id}: {response.status_code} - {response.text}")
@@ -308,14 +365,24 @@ def stop_rathole_client(server_id):
 def remove_tunnel_instance(server_id):
     """Remove tunnel instance from the rathole instance manager"""
     try:
+        base_url = get_rathole_base_url()
+        headers = get_auth_headers()
+        
+        # Build query parameters for legacy auth
+        params = {}
+        if not ACCESS_TOKEN and LEGACY_AUTH_ENABLED:
+            params['token'] = RATHOLE_TOKEN
+        
         response = requests.delete(
-            f'http://{RATHOLE_INSTANCE_MANAGER_HOST}:{RATHOLE_INSTANCE_MANAGER_PORT}/api/instances/{server_id}',
-            params={'token': RATHOLE_TOKEN},
-            timeout=10
+            f'{base_url}/api/instances/{server_id}',
+            params=params,
+            headers=headers,
+            timeout=10,
+            verify=False if USE_HTTPS_RATHOLE else True  # Skip SSL verification for self-signed certs
         )
         
         if response.status_code == 200:
-            print(f"✓ Removed tunnel instance for {server_id}")
+            print(f"✓ Removed tunnel instance for {server_id} using {'access token' if ACCESS_TOKEN else 'legacy auth'}")
         else:
             print(f"Failed to remove tunnel instance for {server_id}: {response.status_code} - {response.text}")
             
@@ -340,9 +407,23 @@ def spawn_container():
         environment_vars = data.get('environmentVariables', {})
         
         print(f"Received spawn request for {server_id}:")
+        print(f"  Server Name: {server_name}")
         print(f"  Game Port: {game_port}")
         print(f"  Beacon Port: {beacon_port}")
+        print(f"  RAM Allocation: {ram_allocation} (type: {type(ram_allocation)})")
+        print(f"  CPU Allocation: {cpu_allocation} (type: {type(cpu_allocation)})")
+        print(f"  Max Players: {max_players}")
         print(f"  Environment Variables from Orchestrator: {environment_vars}")
+        
+        # Debug: Check auth headers
+        auth_header = request.headers.get('Authorization')
+        print(f"  DEBUG: Authorization header from orchestrator: {auth_header[:50] if auth_header else 'None'}...")
+        print(f"  DEBUG: Extracted token from g: {g.access_token[:20] if hasattr(g, 'access_token') and g.access_token else 'None'}...")
+        
+        # Test auth headers that will be sent to Rathole manager
+        test_headers = get_auth_headers()
+        auth_for_rathole = test_headers.get('Authorization', 'None')
+        print(f"  DEBUG: Auth header for Rathole: {auth_for_rathole[:50] if auth_for_rathole != 'None' else 'None'}...")
         
         # Create server directory structure
         server_dir = f'/data/satisfactory/{server_id}'
@@ -424,6 +505,9 @@ def stop_container():
     try:
         data = request.json
         server_id = data['serverId']
+        cleanup_type = data.get('cleanupType', 'stop')  # 'stop' or 'delete'
+        
+        print(f"Stop request for {server_id} with cleanup type: {cleanup_type}")
         
         # Check if we have tracking info for this container
         if server_id not in running_containers:
@@ -431,6 +515,10 @@ def stop_container():
             try:
                 container = client.containers.get(server_id)
                 container.stop()
+                
+                # Clean up data based on type
+                cleanup_server_data(server_id, cleanup_type)
+                
                 return jsonify({
                     'status': 'success',
                     'message': f'Container {server_id} stopped successfully (fallback method)'
@@ -439,7 +527,7 @@ def stop_container():
                 return jsonify({
                     'status': 'error',
                     'message': 'Container not found'
-                }), 404
+                }, 404)
         
         # Use Docker Compose to stop
         container_info = running_containers[server_id]
@@ -447,9 +535,16 @@ def stop_container():
         server_dir = container_info.get('server_dir')
         
         if compose_file and os.path.exists(compose_file):
-            result = subprocess.run([
-                'docker-compose', '-f', compose_file, 'down'
-            ], capture_output=True, text=True, cwd=server_dir)
+            if cleanup_type == 'delete':
+                # Full deletion with volumes
+                result = subprocess.run([
+                    'docker-compose', '-f', compose_file, 'down', '-v'
+                ], capture_output=True, text=True, cwd=server_dir)
+            else:
+                # Normal stop
+                result = subprocess.run([
+                    'docker-compose', '-f', compose_file, 'down'
+                ], capture_output=True, text=True, cwd=server_dir)
             
             if result.returncode != 0:
                 raise Exception(f"Docker Compose stop failed: {result.stderr}")
@@ -461,9 +556,12 @@ def stop_container():
         # Stop the Rathole client process
         stop_rathole_client(server_id)
         
+        # Clean up data based on type
+        cleanup_server_data(server_id, cleanup_type)
+        
         return jsonify({
             'status': 'success',
-            'message': f'Container {server_id} stopped successfully'
+            'message': f'Container {server_id} {"deleted" if cleanup_type == "delete" else "stopped"} successfully'
         })
         
     except Exception as e:
@@ -493,7 +591,7 @@ def restart_container():
                 return jsonify({
                     'status': 'error',
                     'message': 'Container not found'
-                }), 404
+                }, 404)
         
         # Use Docker Compose to restart
         container_info = running_containers[server_id]
@@ -537,7 +635,7 @@ def get_container_status(server_id):
         return jsonify({
             'status': 'error',
             'message': 'Container not found'
-        }), 404
+        }, 404)
     except Exception as e:
         return jsonify({
             'status': 'error',
@@ -570,7 +668,7 @@ def start_container():
         return jsonify({
             'status': 'error',
             'message': 'Container not found'
-        }), 404
+        }, 404)
     except Exception as e:
         return jsonify({
             'status': 'error',
@@ -618,7 +716,7 @@ def update_container_config(server_id):
         return jsonify({
             'status': 'error',
             'message': 'Container not found'
-        }), 404
+        }, 404)
     except Exception as e:
         return jsonify({
             'status': 'error',
@@ -876,7 +974,7 @@ def register_with_orchestrator():
             )
             
             if response.status_code == 200:
-                print(f"Successfully registered with orchestrator as {NODE_ID}")
+                print(f"Successfully registered with orchestrator as {NODE_ID} and IP {ip_address}")
                 return True
             else:
                 print(f"Failed to register with orchestrator: {response.status_code} - {response.text}")
@@ -1033,6 +1131,290 @@ def restart_threads():
             'status': 'success',
             'message': 'Background threads restarted'
         })
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+@app.before_request
+def extract_access_token():
+    """Extract access token from Authorization header for forwarding to Rathole manager"""
+    auth_header = request.headers.get('Authorization')
+    print(f"DEBUG: before_request - Auth header: {auth_header[:50] if auth_header else 'None'}...")
+    if auth_header and auth_header.startswith('Bearer '):
+        # Extract the token without the 'Bearer ' prefix
+        g.access_token = auth_header[7:]  # Remove 'Bearer ' prefix
+        print(f"DEBUG: Extracted access token: {g.access_token[:20]}..." if g.access_token else "No token")
+    else:
+        g.access_token = None
+        print("DEBUG: No valid Authorization header found")
+
+def get_container_ip(server_id):
+    """Get the IP address of a container"""
+    try:
+        container = client.containers.get(server_id)
+        networks = container.attrs['NetworkSettings']['Networks']
+        
+        # Look for the satisfactory network first, then use any available network
+        for network_name, network_info in networks.items():
+            if 'satisfactory' in network_name.lower():
+                return network_info['IPAddress']
+        
+        # If no satisfactory network, use the first available IP
+        for network_name, network_info in networks.items():
+            if network_info['IPAddress']:
+                return network_info['IPAddress']
+                
+        return None
+    except Exception as e:
+        print(f"Error getting container IP for {server_id}: {str(e)}")
+        return None
+
+def cleanup_server_data(server_id, cleanup_type='stop'):
+    """
+    Clean up server data based on cleanup type
+    
+    cleanup_type options:
+    - 'stop': Keep server data, remove rathole configs only
+    - 'delete': Remove everything including docker volumes
+    - 'rathole': Remove only rathole configs
+    """
+    try:
+        print(f"Cleaning up server data for {server_id} (type: {cleanup_type})")
+        
+        # Always clean up rathole configs
+        rathole_dir = f'/data/rathole/{server_id}'
+        if os.path.exists(rathole_dir):
+            import shutil
+            shutil.rmtree(rathole_dir)
+            print(f"✓ Removed rathole directory: {rathole_dir}")
+        
+        if cleanup_type == 'delete':
+            # Full deletion - remove everything
+            server_dir = f'/data/satisfactory/{server_id}'
+            
+            # 1. Stop and remove container with volumes
+            try:
+                container_info = running_containers.get(server_id, {})
+                compose_file = container_info.get('compose_file')
+                
+                if compose_file and os.path.exists(compose_file):
+                    # Use docker-compose down with volumes flag
+                    result = subprocess.run([
+                        'docker-compose', '-f', compose_file, 'down', '-v'
+                    ], capture_output=True, text=True, cwd=os.path.dirname(compose_file))
+                    
+                    if result.returncode == 0:
+                        print(f"✓ Container and volumes removed via docker-compose")
+                    else:
+                        print(f"⚠ Docker-compose down failed: {result.stderr}")
+                        
+                        # Fallback: manual container and volume cleanup
+                        cleanup_container_and_volumes_manually(server_id)
+                else:
+                    # Fallback: manual cleanup
+                    cleanup_container_and_volumes_manually(server_id)
+                    
+            except Exception as e:
+                print(f"Error during container cleanup: {e}")
+                cleanup_container_and_volumes_manually(server_id)
+            
+            # 2. Remove server directory
+            if os.path.exists(server_dir):
+                import shutil
+                shutil.rmtree(server_dir)
+                print(f"✓ Removed server directory: {server_dir}")
+            
+            # 3. Remove from tracking
+            if server_id in running_containers:
+                del running_containers[server_id]
+                print(f"✓ Removed from tracking")
+                
+            print(f"✓ Complete deletion of {server_id} finished")
+            
+        elif cleanup_type == 'stop':
+            # Stop only - keep server data but clean rathole
+            print(f"✓ Stop cleanup completed - server data preserved")
+            
+        return True
+        
+    except Exception as e:
+        print(f"Error cleaning up server data for {server_id}: {str(e)}")
+        return False
+
+def cleanup_container_and_volumes_manually(server_id):
+    """Manual container and volume cleanup as fallback"""
+    try:
+        # Stop and remove container
+        try:
+            container = client.containers.get(server_id)
+            container.stop(timeout=10)
+            container.remove(v=True, force=True)  # Remove with volumes
+            print(f"✓ Container {server_id} stopped and removed with volumes")
+        except docker.errors.NotFound:
+            print(f"Container {server_id} not found - may already be removed")
+        except Exception as e:
+            print(f"Error removing container {server_id}: {e}")
+        
+        # Find and remove associated volumes
+        try:
+            volumes = client.volumes.list()
+            server_volumes = [v for v in volumes if server_id in v.name]
+            
+            for volume in server_volumes:
+                try:
+                    volume.remove(force=True)
+                    print(f"✓ Removed volume: {volume.name}")
+                except Exception as e:
+                    print(f"Error removing volume {volume.name}: {e}")
+                    
+        except Exception as e:
+            print(f"Error during volume cleanup: {e}")
+            
+    except Exception as e:
+        print(f"Error in manual cleanup: {e}")
+
+def get_server_data_info(server_id):
+    """Get information about server data storage"""
+    try:
+        info = {
+            'server_id': server_id,
+            'server_dir': f'/data/satisfactory/{server_id}',
+            'rathole_dir': f'/data/rathole/{server_id}',
+            'docker_volumes': [],
+            'data_size': 0
+        }
+        
+        # Check if directories exist
+        server_dir = info['server_dir']
+        rathole_dir = info['rathole_dir']
+        
+        info['server_dir_exists'] = os.path.exists(server_dir)
+        info['rathole_dir_exists'] = os.path.exists(rathole_dir)
+        
+        # Get directory sizes
+        if info['server_dir_exists']:
+            info['server_dir_size'] = get_directory_size(server_dir)
+        else:
+            info['server_dir_size'] = 0
+            
+        if info['rathole_dir_exists']:
+            info['rathole_dir_size'] = get_directory_size(rathole_dir)
+        else:
+            info['rathole_dir_size'] = 0
+        
+        # Find associated Docker volumes
+        try:
+            volumes = client.volumes.list()
+            server_volumes = [v.name for v in volumes if server_id in v.name]
+            info['docker_volumes'] = server_volumes
+        except Exception as e:
+            print(f"Error getting volume info: {e}")
+            
+        return info
+        
+    except Exception as e:
+        print(f"Error getting server data info: {e}")
+        return None
+
+def get_directory_size(directory):
+    """Get the size of a directory in bytes"""
+    try:
+        total_size = 0
+        for dirpath, dirnames, filenames in os.walk(directory):
+            for filename in filenames:
+                filepath = os.path.join(dirpath, filename)
+                try:
+                    total_size += os.path.getsize(filepath)
+                except OSError:
+                    pass
+        return total_size
+    except Exception:
+        return 0
+
+# ... existing code ...
+
+# Add new endpoint for complete server deletion
+@app.route('/api/containers/<server_id>/delete', methods=['DELETE'])
+def delete_server_completely(server_id):
+    """Completely delete a server including all data and volumes"""
+    try:
+        print(f"Complete deletion request for {server_id}")
+        
+        # Stop rathole client first
+        stop_rathole_client(server_id)
+        
+        # Complete cleanup
+        if cleanup_server_data(server_id, 'delete'):
+            return jsonify({
+                'status': 'success',
+                'message': f'Server {server_id} completely deleted including all data'
+            })
+        else:
+            return jsonify({
+                'status': 'error',
+                'message': f'Failed to completely delete server {server_id}'
+            }), 500
+            
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+# Add endpoint to get server data information
+@app.route('/api/containers/<server_id>/data-info', methods=['GET'])
+def get_server_data_info_endpoint(server_id):
+    """Get information about server data storage"""
+    try:
+        info = get_server_data_info(server_id)
+        if info:
+            return jsonify({
+                'status': 'success',
+                'data_info': info
+            })
+        else:
+            return jsonify({
+                'status': 'error',
+                'message': 'Failed to get server data info'
+            }), 500
+            
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+# Add endpoint to list all server data on this node
+@app.route('/api/containers/data-summary', methods=['GET'])
+def get_all_server_data_summary():
+    """Get summary of all server data on this node"""
+    try:
+        summary = {
+            'total_servers': 0,
+            'total_size': 0,
+            'servers': []
+        }
+        
+        # Check /data/satisfactory directory
+        satis_dir = '/data/satisfactory'
+        if os.path.exists(satis_dir):
+            for item in os.listdir(satis_dir):
+                item_path = os.path.join(satis_dir, item)
+                if os.path.isdir(item_path) and item.startswith('srv_'):
+                    info = get_server_data_info(item)
+                    if info:
+                        summary['servers'].append(info)
+                        summary['total_size'] += info.get('server_dir_size', 0) + info.get('rathole_dir_size', 0)
+        
+        summary['total_servers'] = len(summary['servers'])
+        
+        return jsonify({
+            'status': 'success',
+            'summary': summary
+        })
+        
     except Exception as e:
         return jsonify({
             'status': 'error',

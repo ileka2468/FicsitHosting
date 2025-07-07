@@ -64,14 +64,6 @@ services:
       # Application Configuration
       APP_PUBLIC_IP: ${PUBLIC_IP}
       APP_HOST_AGENT_PORT: ${APP_HOST_AGENT_PORT:-8081}
-      APP_RATHOLE_SERVER_HOST: ${RATHOLE_HOST}
-      APP_RATHOLE_SERVER_CONTROL_PORT: 7000
-      APP_RATHOLE_API_TOKEN: ${RATHOLE_TOKEN}
-      
-      # Rathole Instance Manager Configuration
-      RATHOLE_INSTANCE_MANAGER_HOST: ${RATHOLE_INSTANCE_MANAGER_HOST}
-      RATHOLE_INSTANCE_MANAGER_PORT: ${RATHOLE_INSTANCE_MANAGER_PORT}
-      RATHOLE_TOKEN: ${RATHOLE_TOKEN}
       
       # Health Check Configuration (loaded from .env file)
       HEARTBEAT_INTERVAL: ${HEARTBEAT_INTERVAL}

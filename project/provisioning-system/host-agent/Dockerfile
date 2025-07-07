@@ -34,7 +34,7 @@ COPY .env /app/.env
 RUN mkdir -p /data/satisfactory /data/rathole
 
 # Expose the agent API port
-EXPOSE 8081
+EXPOSE 8082
 
 # Run the agent
 CMD ["python", "agent.py"]
