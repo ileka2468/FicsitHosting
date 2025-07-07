@@ -324,6 +324,14 @@ public class ProvisioningService {
         
         return gameServerRepository.findByUserId(userId);
     }
+
+    /**
+     * Get all servers for the authenticated user
+     */
+    public List<GameServer> getServersForCurrentUser(String jwt) {
+        UserInfo user = validateJwtAndGetUser(jwt);
+        return gameServerRepository.findByUserId(user.getId().toString());
+    }
     
     /**
      * Get server by ID

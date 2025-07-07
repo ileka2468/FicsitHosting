@@ -3,11 +3,11 @@ import {
   ServerConfig,
   Player 
 } from '../types';
-import { API_ENDPOINTS } from '../config/api';
+import { API_ENDPOINTS, ORCHESTRATOR_BASE_URL } from '../config/api';
 
 // API Configuration
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8081/api';
-const WS_BASE_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:8081/ws';
+const API_BASE_URL = ORCHESTRATOR_BASE_URL;
+const WS_BASE_URL = import.meta.env.VITE_WS_URL || 'ws://orchestrator:8080/ws';
 
 // API Types matching Spring Boot DTOs
 export interface ProvisionServerRequest {

@@ -161,12 +161,49 @@ public class NodeSchedulerService {
     public void checkNodeHealth(int timeoutMinutes) {
         checkNodeHealth((double) timeoutMinutes);
     }
-    
+
     /**
      * Check for nodes that haven't sent heartbeats and mark them offline
      * Uses default timeout of 3 minutes
      */
     public void checkNodeHealth() {
         checkNodeHealth(3);
+    }
+
+    /**
+     * Get all nodes
+     */
+    public List<Node> getAllNodes() {
+        return nodeRepository.findAll();
+    }
+
+    /**
+     * Get a node by ID
+     */
+    public Node getNodeById(String nodeId) {
+        return nodeRepository.findByNodeId(nodeId).orElse(null);
+    }
+
+    /**
+     * Update node information
+     */
+    public Node updateNode(String nodeId, String hostname, String ipAddress, Integer maxServers) {
+        Optional<Node> nodeOpt = nodeRepository.findByNodeId(nodeId);
+        if (nodeOpt.isEmpty()) {
+            throw new RuntimeException("Node not found: " + nodeId);
+        }
+
+        Node node = nodeOpt.get();
+        if (hostname != null) node.setHostname(hostname);
+        if (ipAddress != null) node.setIpAddress(ipAddress);
+        if (maxServers != null) node.setMaxServers(maxServers);
+        return nodeRepository.save(node);
+    }
+
+    /**
+     * Delete a node
+     */
+    public void deleteNode(String nodeId) {
+        nodeRepository.findByNodeId(nodeId).ifPresent(nodeRepository::delete);
     }
 }
