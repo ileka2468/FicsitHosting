@@ -21,6 +21,7 @@ import java.util.UUID;
 import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
+import java.util.ArrayList;
 
 @Service
 public class ProvisioningService {
@@ -33,9 +34,6 @@ public class ProvisioningService {
     
     @Autowired
     private HostAgentService hostAgentService;
-    
-    @Autowired
-    private RatholeService ratholeService;
     
     @Autowired
     private GameServerRepository gameServerRepository;
@@ -184,8 +182,8 @@ public class ProvisioningService {
         }
         spawnRequest.setEnvironmentVariables(envVars);
         
-        // Send request to host agent asynchronously
-        hostAgentService.spawnContainer(selectedNode.getIpAddress(), spawnRequest)
+        // Send request to host agent asynchronously with JWT token
+        hostAgentService.spawnContainer(selectedNode.getIpAddress(), spawnRequest, jwt)
             .subscribe(
                 response -> {
                     // Update server status on success
@@ -196,8 +194,11 @@ public class ProvisioningService {
                     }
                     gameServerRepository.save(finalGameServer);
                     
-                    // Configure Rathole tunnels
-                    configureRatholeTunnels(finalGameServer);
+                    // Host agent handles tunnel creation during spawn
+                    System.out.println("Container spawned successfully. Tunnel creation handled by host agent for server: " + finalGameServer.getServerId());
+                    
+                    // Check container status after a brief delay to see if it's running
+                    checkContainerStatusAndUpdateServer(finalGameServer);
                 },
                 error -> {
                     // Update server status on error
@@ -240,7 +241,7 @@ public class ProvisioningService {
                     gameServerRepository.save(server);
                     
                     // Remove Rathole tunnels
-                    removeRatholeTunnels(server);
+                    removeRatholeTunnels(server, jwt);
                 },
                 error -> {
                     server.setStatus(GameServer.ServerStatus.ERROR);
@@ -270,71 +271,41 @@ public class ProvisioningService {
             throw new RuntimeException("Insufficient permissions: You can only delete your own servers");
         }
         
-        // Stop server first if running
-        if (server.getStatus() == GameServer.ServerStatus.RUNNING || 
-            server.getStatus() == GameServer.ServerStatus.STARTING) {
-            stopServer(jwt, serverId);
-        }
+        // Set status to indicate deletion in progress
+        server.setStatus(GameServer.ServerStatus.ERROR); // Use ERROR as deletion indicator
+        gameServerRepository.save(server);
         
-        // Release ports
-        portAllocationService.releasePorts(serverId);
-        
-        // Remove Rathole tunnels
-        removeRatholeTunnels(server);
-        
-        // Delete server record
-        gameServerRepository.delete(server);
+        // Use the new complete deletion endpoint on host agent
+        hostAgentService.deleteServerCompletely(server.getNode().getIpAddress(), serverId, jwt)
+            .subscribe(
+                response -> {
+                    // Release ports
+                    portAllocationService.releasePorts(serverId);
+                    
+                    // Remove Rathole tunnels
+                    removeRatholeTunnels(server, jwt);
+                    
+                    // Delete server record from database
+                    gameServerRepository.delete(server);
+                    
+                    System.out.println("Server " + serverId + " completely deleted");
+                },
+                error -> {
+                    System.err.println("Failed to completely delete server " + serverId + ": " + error.getMessage());
+                    // Attempt fallback cleanup
+                    portAllocationService.releasePorts(serverId);
+                    removeRatholeTunnels(server, jwt);
+                    gameServerRepository.delete(server);
+                }
+            );
     }
-    
-    private void configureRatholeTunnels(GameServer server) {
-        // Create individual Rathole instance for this server
-        ratholeService.createInstance(
-            server.getServerId(),
-            server.getGamePort(),
-            server.getBeaconPort()
-        ).subscribe(
-            success -> {
-                System.out.println("Rathole instance created for server: " + server.getServerId());
-                
-                // Get client config and send to host agent
-                ratholeService.getClientConfig(server.getServerId(), server.getNode().getIpAddress())
-                    .subscribe(
-                        clientConfigResponse -> {
-                            if (clientConfigResponse.containsKey("config")) {
-                                String clientConfig = (String) clientConfigResponse.get("config");
-                                // Send client config to host agent
-                                hostAgentService.configureRatholeClient(
-                                    server.getNode().getIpAddress(), 
-                                    server.getServerId(), 
-                                    clientConfig
-                                ).subscribe(
-                                    configSuccess -> System.out.println("Rathole client configured on host agent for " + server.getServerId()),
-                                    configError -> System.err.println("Failed to configure Rathole client: " + configError.getMessage())
-                                );
-                            }
-                        },
-                        configError -> System.err.println("Failed to get client config: " + configError.getMessage())
-                    );
-            },
-            error -> System.err.println("Failed to create Rathole instance for " + server.getServerId() + ": " + error.getMessage())
-        );
-    }
-    
-    private void removeRatholeTunnels(GameServer server) {
-        // Remove individual Rathole instance for this server
-        ratholeService.removeInstance(server.getServerId()).subscribe(
-            success -> {
-                System.out.println("Rathole instance removed for server: " + server.getServerId());
-                
-                // Stop Rathole client on host agent
-                hostAgentService.stopRatholeClient(server.getNode().getIpAddress(), server.getServerId())
-                    .subscribe(
-                        stopSuccess -> System.out.println("Rathole client stopped on host agent for " + server.getServerId()),
-                        stopError -> System.err.println("Failed to stop Rathole client: " + stopError.getMessage())
-                    );
-            },
-            error -> System.err.println("Failed to remove Rathole instance for " + server.getServerId() + ": " + error.getMessage())
-        );
+      private void removeRatholeTunnels(GameServer server, String jwt) {
+        // Stop Rathole client on host agent - this will also remove the tunnel instance
+        hostAgentService.stopRatholeClient(server.getNode().getIpAddress(), server.getServerId(), jwt)
+            .subscribe(
+                stopSuccess -> System.out.println("Rathole client stopped and tunnel removed for " + server.getServerId()),
+                stopError -> System.err.println("Failed to stop Rathole client: " + stopError.getMessage())
+            );
     }
     
     /**
@@ -419,8 +390,8 @@ public class ProvisioningService {
                     server.setStartedAt(ZonedDateTime.now(ZoneOffset.UTC));
                     gameServerRepository.save(server);
                     
-                    // Configure Rathole tunnels
-                    configureRatholeTunnels(server);
+                    // Host agent handles tunnel configuration
+                    System.out.println("Container started successfully. Tunnel already configured by host agent for server: " + server.getServerId());
                 },
                 error -> {
                     server.setStatus(GameServer.ServerStatus.ERROR);
@@ -559,5 +530,139 @@ public class ProvisioningService {
                     }
                 );
         }
+    }
+    
+    /**
+     * Check container status after spawn and update server status to RUNNING if container is running
+     */
+    private void checkContainerStatusAndUpdateServer(GameServer server) {
+        // Use a separate thread to check status after a delay
+        new Thread(() -> {
+            try {
+                // Wait 5 seconds for container to fully start
+                Thread.sleep(5000);
+                
+                hostAgentService.getContainerStatus(server.getNode().getIpAddress(), server.getServerId())
+                    .subscribe(
+                        statusResponse -> {
+                            if (statusResponse.containsKey("status")) {
+                                String containerStatus = statusResponse.get("status").toString();
+                                System.out.println("Container status for " + server.getServerId() + ": " + containerStatus);
+                                
+                                // Update server status based on container status
+                                if ("running".equalsIgnoreCase(containerStatus)) {
+                                    server.setStatus(GameServer.ServerStatus.RUNNING);
+                                    gameServerRepository.save(server);
+                                    System.out.println("Updated server " + server.getServerId() + " status to RUNNING");
+                                } else if ("exited".equalsIgnoreCase(containerStatus) || 
+                                          "dead".equalsIgnoreCase(containerStatus)) {
+                                    server.setStatus(GameServer.ServerStatus.ERROR);
+                                    gameServerRepository.save(server);
+                                    System.out.println("Updated server " + server.getServerId() + " status to ERROR due to container status: " + containerStatus);
+                                }
+                                // For other statuses like "created", "restarting", keep STARTING
+                            }
+                        },
+                        error -> {
+                            System.err.println("Failed to check container status for " + server.getServerId() + ": " + error.getMessage());
+                            // Don't change status on error - server might still be starting
+                        }
+                    );
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                System.err.println("Container status check interrupted for " + server.getServerId());
+            }
+        }).start();
+    }
+    
+    /**
+     * Get server data information
+     */
+    public Map<String, Object> getServerDataInfo(String jwt, String serverId) {
+        // Validate JWT and get user info
+        UserInfo user = validateJwtAndGetUser(jwt);
+        
+        Optional<GameServer> serverOpt = gameServerRepository.findByServerId(serverId);
+        
+        if (serverOpt.isEmpty()) {
+            throw new RuntimeException("Server not found: " + serverId);
+        }
+        
+        GameServer server = serverOpt.get();
+        
+        // Check if user can access this server
+        if (!canAccessServer(user, server)) {
+            throw new RuntimeException("Insufficient permissions: You can only view your own servers");
+        }
+        
+        try {
+            Map<String, Object> dataInfo = hostAgentService.getServerDataInfo(
+                server.getNode().getIpAddress(), serverId).block();
+                
+            if (dataInfo != null && "success".equals(dataInfo.get("status"))) {
+                return dataInfo;
+            } else {
+                throw new RuntimeException("Failed to get server data info from host agent");
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("Error getting server data info: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Get data summary for all servers of a user
+     */
+    public Map<String, Object> getUserServersDataSummary(String jwt, String userId) {
+        // Validate JWT and get user info
+        UserInfo user = validateJwtAndGetUser(jwt);
+        
+        // Users can only see their own servers, unless they're admins or service accounts
+        if (!hasRole(user, "ADMIN") && !hasRole(user, "SERVICE_ACCOUNT")) {
+            if (!userId.equals(user.getId().toString())) {
+                throw new RuntimeException("Insufficient permissions: You can only view your own servers");
+            }
+        }
+        
+        List<GameServer> userServers = gameServerRepository.findByUserId(userId);
+        
+        Map<String, Object> summary = new HashMap<>();
+        summary.put("total_servers", userServers.size());
+        summary.put("total_size", 0L);
+        summary.put("servers", new ArrayList<>());
+        
+        long totalSize = 0;
+        List<Map<String, Object>> serverDataList = new ArrayList<>();
+        
+        for (GameServer server : userServers) {
+            try {
+                Map<String, Object> dataInfo = hostAgentService.getServerDataInfo(
+                    server.getNode().getIpAddress(), server.getServerId()).block();
+                    
+                if (dataInfo != null && "success".equals(dataInfo.get("status"))) {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> dataInfoMap = (Map<String, Object>) dataInfo.get("data_info");
+                    
+                    // Add server metadata
+                    dataInfoMap.put("server_name", server.getServerName());
+                    dataInfoMap.put("status", server.getStatus().toString());
+                    dataInfoMap.put("node_id", server.getNode().getNodeId());
+                    
+                    serverDataList.add(dataInfoMap);
+                    
+                    // Calculate total size
+                    Long serverDirSize = (Long) dataInfoMap.get("server_dir_size");
+                    Long ratholeDirSize = (Long) dataInfoMap.get("rathole_dir_size");
+                    if (serverDirSize != null) totalSize += serverDirSize;
+                    if (ratholeDirSize != null) totalSize += ratholeDirSize;
+                }
+            } catch (Exception e) {
+                System.err.println("Failed to get data info for server " + server.getServerId() + ": " + e.getMessage());
+            }
+        }
+        
+        summary.put("total_size", totalSize);
+        summary.put("servers", serverDataList);
+        
+        return summary;
     }
 }

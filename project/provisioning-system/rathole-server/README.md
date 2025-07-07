@@ -1,178 +1,247 @@
-# Rathole Server Setup
+# Secure Rathole Instance Manager
 
-This directory contains the configuration and deployment files for the Rathole tunnel server that provides public access to Satisfactory game servers.
+A production-ready Rathole tunnel management service with authentication, authorization, and user-scoped access control.
+
+## Features
+
+- **🔐 Authentication & Authorization**: Integration with auth-service for token validation
+- **👥 Role-Based Access Control (RBAC)**: Support for USER, ADMIN, MODERATOR, and SERVICE_ACCOUNT roles
+- **🔒 User-Scoped Tunnels**: Users can only manage their own tunnels (admins can manage all)
+- **🌐 HTTPS Support**: TLS/SSL encryption for secure communication
+- **🔄 Backward Compatibility**: Legacy API token support for smooth migration
+- **📊 Comprehensive Logging**: Detailed audit trail for all operations
+- **⚡ High Performance**: Multi-threaded server with optimized port allocation
 
 ## Architecture
 
-- **Rathole Server**: Core tunneling service that accepts connections from clients
-- **Control API**: HTTP API for dynamically managing tunnels
-- **Docker Compose**: Complete deployment stack
+```
+Player/Admin → Orchestrator (RBAC) → Host Agent → Rathole Manager (Token Validation)
+                     ↓
+              Auth Service validates access token
+```
 
-## Configuration
+## Quick Start
 
-### Security Tokens
+### Development Mode (Legacy Auth)
 
-Before deploying, update the following tokens in your configuration files:
-
-1. **rathole-server.toml**:
-   - `default_token`: Main authentication token for clients
-   - `server.control.token`: API control token
-
-2. **docker-compose.yml**:
-   - `API_TOKEN`: Environment variable for the API service
-
-3. **Generate secure tokens**:
+1. **Setup Environment**:
    ```bash
-   # Generate random tokens
-   openssl rand -hex 32  # For default_token
-   openssl rand -hex 32  # For control token
+   cp .env.example .env
+   # Edit .env with your configuration
    ```
 
-### Port Configuration
-
-- **2333**: Main Rathole server port (for client connections)
-- **7000**: Control API port (for tunnel management)
-- **7001**: Optional separate API service port
-- **15000-16000/udp**: Port range for Satisfactory game servers
-
-## Deployment
-
-### Local Development
-
-1. Update tokens in configuration files
-2. Start the services:
+2. **Start the Service**:
    ```bash
    docker-compose up -d
    ```
 
-### Production Deployment
-
-1. **Security Hardening**:
-   - Enable TLS in `rathole-server.toml`
-   - Use environment variables for sensitive tokens
-   - Restrict network access to control API
-
-2. **TLS Configuration** (recommended):
-   ```toml
-   [server.transport.tls]
-   pkcs12 = "/path/to/cert.p12"
-   pkcs12_password = "your_cert_password"
+3. **Test the API**:
+   ```bash
+   curl -H "X-API-Token: your-token" http://localhost:7001/health
    ```
 
-3. **Environment Variables**:
+### Production Mode (Secure Auth)
+
+1. **Generate SSL Certificates**:
    ```bash
-   export RATHOLE_DEFAULT_TOKEN="your-secure-token"
-   export RATHOLE_CONTROL_TOKEN="your-control-token"
+   ./generate-ssl-certs.sh
+   ```
+
+2. **Configure Environment**:
+   ```bash
+   cp .env.example .env
+   # Update .env:
+   USE_HTTPS=true
+   AUTH_SERVICE_URL=https://your-auth-service.com
+   LEGACY_AUTH_ENABLED=false
+   PUBLIC_IP=your.vps.ip.address
+   ```
+
+3. **Deploy**:
+   ```bash
+   docker-compose up -d
    ```
 
 ## API Endpoints
 
-The control API provides the following endpoints:
+### Public Endpoints
 
-### Add Tunnel
-```http
-POST /api/tunnels/add
-Content-Type: application/json
+- `GET /health` - Service health check
 
-{
-  "id": "server123_game",
-  "bind_addr": "0.0.0.0:15001",
-  "target_addr": "10.0.1.100:7777",
-  "token": "your-api-token"
-}
-```
+### Authenticated Endpoints
 
-### Remove Tunnel
-```http
-POST /api/tunnels/remove
-Content-Type: application/json
+All require valid access token or legacy API token.
 
-{
-  "id": "server123_game",
-  "token": "your-api-token"
-}
-```
+#### Tunnel Management
 
-### List Tunnels
-```http
-GET /api/tunnels?token=your-api-token
-```
+- `POST /api/instances` - Create new tunnel
+- `GET /api/instances` - List user's tunnels
+- `GET /api/instances/{id}` - Get tunnel details
+- `DELETE /api/instances/{id}` - Remove tunnel
+- `GET /api/instances/{id}/client-config` - Get client configuration
 
-### Health Check
-```http
-GET /health
-```
+#### Admin Endpoints
 
-## Integration with Orchestrator
+Require ADMIN or SERVICE_ACCOUNT role.
 
-The Spring Boot orchestrator uses the `RatholeService` to communicate with this API:
+- `GET /api/admin/instances` - List all tunnels (admin view)
+- `DELETE /api/admin/instances/{id}` - Force remove any tunnel
 
-```java
-// Configure tunnels for a new server
-ratholeService.createTunnel(
-    serverId + "_game",
-    "0.0.0.0:" + gamePort,
-    nodeIp + ":" + gamePort
-);
-```
+## Authentication
 
-## Monitoring
+### Access Token (Recommended)
 
-### Logs
-- Rathole server logs: `/var/log/rathole/server.log`
-- API logs: Docker container logs
-
-### Health Checks
 ```bash
-# Check Rathole server
-nc -z localhost 2333
-
-# Check API service
-curl http://localhost:7001/health
+curl -H "Authorization: Bearer your-access-token" \
+     -H "Content-Type: application/json" \
+     -d '{"server_id": "server1", "game_port": 7777}' \
+     https://your-server.com/api/instances
 ```
+
+### Legacy API Token (Backward Compatibility)
+
+```bash
+# Header method
+curl -H "X-API-Token: your-api-token" \
+     -H "Content-Type: application/json" \
+     -d '{"server_id": "server1", "game_port": 7777}' \
+     http://your-server.com:7001/api/instances
+
+# Payload method (deprecated)
+curl -H "Content-Type: application/json" \
+     -d '{"token": "your-api-token", "server_id": "server1", "game_port": 7777}' \
+     http://your-server.com:7001/api/instances
+```
+
+## User Roles & Permissions
+
+| Role | Permissions |
+|------|-------------|
+| **USER** | Create, read, update, delete own tunnels |
+| **ADMIN** | All USER permissions + manage any tunnel + admin endpoints |
+| **MODERATOR** | Same as USER (future: moderate content) |
+| **SERVICE_ACCOUNT** | Same as ADMIN (for orchestrator/automation) |
+
+## Environment Variables
+
+### Authentication & Security
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `AUTH_SERVICE_URL` | `http://auth-service:8080` | Auth service endpoint |
+| `USE_HTTPS` | `false` | Enable HTTPS/TLS |
+| `SSL_CERT_PATH` | `/certs/server.crt` | SSL certificate path |
+| `SSL_KEY_PATH` | `/certs/server.key` | SSL private key path |
+| `LEGACY_AUTH_ENABLED` | `true` | Enable legacy API token auth |
+| `API_TOKEN` | `your-token` | Legacy API token |
+
+### Network Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PUBLIC_IP` | `0.0.0.0` | Public IP for tunnel endpoints |
+| `SERVER_PORT` | `7001` | HTTP server port |
+| `HTTPS_PORT` | `443` | HTTPS server port |
+
+### Rathole Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `RATHOLE_BINARY` | `/usr/local/bin/rathole` | Rathole binary path |
+| `BASE_DATA_DIR` | `/data/rathole-instances` | Instance data directory |
+| `RATHOLE_PORT_START` | `10000` | Port range start |
+| `RATHOLE_PORT_END` | `20000` | Port range end |
+
+## Security Considerations
+
+### Production Deployment
+
+1. **Disable Legacy Auth**: Set `LEGACY_AUTH_ENABLED=false`
+2. **Enable HTTPS**: Set `USE_HTTPS=true` and configure valid SSL certificates
+3. **Secure Network**: Ensure auth-service is accessible but not publicly exposed
+4. **Firewall Rules**: Open only necessary port ranges
+5. **Monitor Logs**: Set up log aggregation and monitoring
+
+### SSL Certificates
+
+For production, use certificates from a trusted CA:
+
+```bash
+# Let's Encrypt example
+certbot certonly --standalone -d your-domain.com
+cp /etc/letsencrypt/live/your-domain.com/fullchain.pem ./certs/server.crt
+cp /etc/letsencrypt/live/your-domain.com/privkey.pem ./certs/server.key
+```
+
+## Migration from Legacy
+
+1. **Phase 1**: Deploy with `LEGACY_AUTH_ENABLED=true`
+2. **Phase 2**: Update clients to use access tokens
+3. **Phase 3**: Set `LEGACY_AUTH_ENABLED=false`
+4. **Phase 4**: Enable HTTPS with `USE_HTTPS=true`
 
 ## Troubleshooting
 
 ### Common Issues
 
-1. **Connection Refused**:
-   - Check if ports are open in firewall
-   - Verify Docker containers are running
+1. **Auth Service Connection Failed**:
+   ```bash
+   # Check auth service connectivity
+   curl http://your-auth-service:8080/api/auth/health
+   ```
 
-2. **Authentication Errors**:
-   - Verify tokens match between configuration files
-   - Check token format (should be hex string)
+2. **SSL Certificate Issues**:
+   ```bash
+   # Test certificate
+   openssl x509 -in ./certs/server.crt -text -noout
+   ```
 
-3. **Tunnel Creation Fails**:
-   - Check target server is reachable
-   - Verify port ranges don't conflict
+3. **Permission Denied**:
+   - Check user roles in auth service
+   - Verify access token validity
+   - Ensure user owns the tunnel (for non-admin users)
 
-### Debug Commands
+### Logs
 
 ```bash
 # View container logs
-docker-compose logs rathole-server
-docker-compose logs rathole-api
+docker-compose logs -f rathole-instance-manager
 
-# Test API connectivity
-curl -X GET "http://localhost:7001/api/tunnels?token=your-token"
-
-# Check port bindings
-netstat -tulpn | grep -E "(2333|7000|7001)"
+# Check instance-specific logs
+docker exec rathole-instance-manager ls -la /data/rathole-instances/
 ```
 
-## Client Configuration
+## Development
 
-Game server nodes need Rathole clients configured to connect back to this server. The client configuration is managed by the host agent on each node.
+### Running Tests
 
-Example client configuration (generated by host agent):
-```toml
-[client]
-remote_addr = "your-rathole-server.com:2333"
-default_token = "your-secure-token"
+```bash
+# Unit tests
+python -m pytest tests/
 
-[client.services.server123_game]
-type = "udp"
-local_addr = "127.0.0.1:7777"
-remote_addr = "0.0.0.0:15001"
+# Integration tests with auth service
+TESTING=true AUTH_SERVICE_URL=http://localhost:8080 python -m pytest tests/integration/
 ```
+
+### API Testing
+
+```bash
+# Test with curl
+curl -H "Authorization: Bearer $(cat access_token.txt)" \
+     http://localhost:7001/health
+
+# Test with httpie
+http :7001/health Authorization:"Bearer $(cat access_token.txt)"
+```
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Add tests for new functionality
+4. Ensure all tests pass
+5. Submit a pull request
+
+## License
+
+MIT License - see LICENSE file for details.

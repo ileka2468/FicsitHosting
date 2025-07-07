@@ -5,8 +5,8 @@ import { AuthServiceStatus } from './AuthServiceStatus';
 import { User } from '../types';
 
 interface NavbarProps {
-  currentSection: 'home' | 'configurator' | 'pricing' | 'servers';
-  onSectionChange: (section: 'home' | 'configurator' | 'pricing' | 'servers') => void;
+  currentSection: 'home' | 'configurator' | 'pricing' | 'servers' | 'admin';
+  onSectionChange: (section: 'home' | 'configurator' | 'pricing' | 'servers' | 'admin') => void;
   onQuickStart: () => void;
   user: User | null;
   onLogin: () => void;
@@ -58,7 +58,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               {navItems.map((item) => (
                 <button
                   key={item.id}
-                  onClick={() => onSectionChange(item.id as 'home' | 'configurator' | 'pricing' | 'servers')}
+                  onClick={() => onSectionChange(item.id as 'home' | 'configurator' | 'pricing' | 'servers' | 'admin')}
                   className={`text-sm font-medium transition-all duration-300 px-4 py-2 rounded-lg ${
                     currentSection === item.id
                       ? 'text-cyan-400 bg-white/20 backdrop-blur-sm shadow-lg'
@@ -122,7 +122,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <button
                   key={item.id}
                   onClick={() => {
-                    onSectionChange(item.id as 'home' | 'configurator' | 'pricing' | 'servers');
+                    onSectionChange(item.id as 'home' | 'configurator' | 'pricing' | 'servers' | 'admin');
                     setIsMobileMenuOpen(false);
                   }}
                   className={`block w-full text-left text-sm font-medium transition-all duration-300 px-4 py-2 rounded-lg ${

@@ -4,7 +4,6 @@
 /home/orion/satis_host/project/provisioning-system/orchestrator/src/main/java/com/satisfactoryhost/orchestrator/dto/UserInfo.java
 /home/orion/satis_host/project/provisioning-system/orchestrator/src/main/java/com/satisfactoryhost/orchestrator/repository/GameServerRepository.java
 /home/orion/satis_host/project/provisioning-system/orchestrator/src/main/java/com/satisfactoryhost/orchestrator/controller/NodeController.java
-/home/orion/satis_host/project/provisioning-system/orchestrator/src/main/java/com/satisfactoryhost/orchestrator/service/RatholeService.java
 /home/orion/satis_host/project/provisioning-system/orchestrator/src/main/java/com/satisfactoryhost/orchestrator/config/WebSocketConfig.java
 /home/orion/satis_host/project/provisioning-system/orchestrator/src/main/java/com/satisfactoryhost/orchestrator/service/NodeSchedulerService.java
 /home/orion/satis_host/project/provisioning-system/orchestrator/src/main/java/com/satisfactoryhost/orchestrator/config/WebClientConfig.java
