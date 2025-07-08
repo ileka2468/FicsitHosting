@@ -14,6 +14,7 @@ RATHOLE_INSTANCE_MANAGER_HOST=your-public-vps-ip  # IP of your public VPS runnin
 RATHOLE_INSTANCE_MANAGER_PORT=7001                # Port where instance manager API runs
 RATHOLE_TOKEN=your-secure-api-token-here          # Secure token for API authentication
 RATHOLE_CLIENT_BINARY=/usr/local/bin/rathole      # Path to Rathole binary (already in Docker)
+USE_CONTAINER_HOSTNAMES=false                    # Set to true when host agent and servers share Docker network
 
 # === HEARTBEAT SETTINGS ===
 HEARTBEAT_INTERVAL=60                              # Seconds between heartbeats to orchestrator

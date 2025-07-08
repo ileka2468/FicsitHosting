@@ -36,6 +36,7 @@ RATHOLE_CLIENT_BINARY = os.environ.get('RATHOLE_CLIENT_BINARY', '/usr/local/bin/
 USE_HTTPS_RATHOLE = os.environ.get('USE_HTTPS_RATHOLE', 'false').lower() == 'true'
 ACCESS_TOKEN = os.environ.get('ACCESS_TOKEN', None)  # Access token from orchestrator
 LEGACY_AUTH_ENABLED = os.environ.get('LEGACY_AUTH_ENABLED', 'true').lower() == 'true'
+USE_CONTAINER_HOSTNAMES = os.environ.get('USE_CONTAINER_HOSTNAMES', 'true').lower() == 'true'
 
 # Heartbeat Configuration (configurable via environment variables)
 HEARTBEAT_INTERVAL = int(os.environ.get('HEARTBEAT_INTERVAL', '60'))  # seconds
@@ -48,6 +49,7 @@ print(f"  Orchestrator URL: {ORCHESTRATOR_URL}")
 print(f"  Heartbeat Interval: {HEARTBEAT_INTERVAL} seconds")
 print(f"  Heartbeat Timeout: {HEARTBEAT_TIMEOUT} seconds")
 print(f"  Max Failures: {MAX_HEARTBEAT_FAILURES}")
+print(f"  Use Container Hostnames: {USE_CONTAINER_HOSTNAMES}")
 
 # Container tracking
 running_containers = {}
@@ -208,9 +210,13 @@ def get_rathole_client_config_from_manager(server_id):
         base_url = get_rathole_base_url()
         headers = get_auth_headers()
 
-        # Use the container hostname so the manager generates a config
-        # that connects directly via Docker's embedded DNS
-        params = {'host_ip': server_id}
+        # Determine how to reach the game server container
+        if USE_CONTAINER_HOSTNAMES:
+            host_ip = server_id
+        else:
+            host_ip = get_container_ip(server_id) or '127.0.0.1'
+
+        params = {'host_ip': host_ip}
         
         # For legacy auth, include token in query params
         if not ACCESS_TOKEN and LEGACY_AUTH_ENABLED:
@@ -247,19 +253,19 @@ def generate_rathole_client_config(server_id, server_name, game_port, beacon_por
     
     # Fallback to local generation (should not be used in individual instance mode)
     print(f"Warning: Using fallback config generation for {server_id}")
-    # IMPORTANT: Use container name instead of 127.0.0.1 for Docker network communication
-    # The Rathole client (running in host agent container) connects to the Satisfactory
-    # server container via Docker network using the container name as hostname
+    # Determine how to address the Satisfactory server container locally
+    host_part = server_id if USE_CONTAINER_HOSTNAMES else (get_container_ip(server_id) or '127.0.0.1')
+
     config = f"""
 [client]
 remote_addr = "{RATHOLE_INSTANCE_MANAGER_HOST}:UNKNOWN_PORT"
 default_token = "{RATHOLE_TOKEN}"
 
 [client.services.{server_id}_game]
-local_addr = "{server_id}:{game_port}"
+local_addr = "{host_part}:{game_port}"
 
 [client.services.{server_id}_beacon]
-local_addr = "{server_id}:{beacon_port}"
+local_addr = "{host_part}:{beacon_port}"
 """
     return config
 
