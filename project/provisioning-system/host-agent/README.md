@@ -35,6 +35,7 @@ docker-compose build && docker-compose up -d
 | Heartbeat Interval | 10 seconds | 60 seconds |
 | Heartbeat Timeout | 5 seconds | 10 seconds |
 | Max Failures | 2 | 3 |
+| Use Container Hostnames | true | false |
 
 ## Override Settings
 
@@ -51,3 +52,5 @@ environment:
 - You must **rebuild the container** after changing the `.env` file
 - Environment variables in `docker-compose.yml` take priority over `.env` file
 - The agent will display current configuration on startup
+- Set `USE_CONTAINER_HOSTNAMES` to `false` in production if the host agent and
+  game servers are on separate Docker hosts

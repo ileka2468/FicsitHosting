@@ -17,6 +17,7 @@ services:
       - RATHOLE_TOKEN=${RATHOLE_TOKEN}
       - HOST_AGENT_API_KEY=${HOST_AGENT_API_KEY}
       - NODE_ID=${NODE_ID}
+      - USE_CONTAINER_HOSTNAMES=${USE_CONTAINER_HOSTNAMES}
       # Disable Flask debug mode to prevent double startup
       - FLASK_DEBUG=false
     extra_hosts:
