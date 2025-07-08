@@ -19,6 +19,7 @@ import shutil
 import ssl
 import requests
 from flask import Flask, request, jsonify, g
+import redis
 from waitress import serve
 from typing import Dict, Any, Optional, List
 from pathlib import Path
@@ -64,6 +65,12 @@ RATHOLE_PORT_END = int(os.getenv('RATHOLE_PORT_END', '20100'))
 # Port range for game traffic (external tunnel endpoints)
 GAME_PORT_START = int(os.getenv('GAME_PORT_START', '40000'))
 GAME_PORT_END = int(os.getenv('GAME_PORT_END', '40100'))
+
+# Optional Redis configuration for persistent port tracking
+REDIS_HOST = os.getenv('REDIS_HOST')
+REDIS_PORT = int(os.getenv('REDIS_PORT', '6379'))
+REDIS_DB = int(os.getenv('REDIS_DB', '0'))
+REDIS_PASSWORD = os.getenv('REDIS_PASSWORD')
 
 # User roles enum
 class Role:
@@ -197,12 +204,51 @@ class RatholeInstanceManager:
         self.instances = {}  # server_id -> instance_info
         self.port_allocations = {}  # port -> server_id
         self.lock = threading.Lock()
-        
+
+        # Optional Redis client for persistent state
+        self.redis = None
+        if REDIS_HOST:
+            try:
+                self.redis = redis.Redis(
+                    host=REDIS_HOST,
+                    port=REDIS_PORT,
+                    db=REDIS_DB,
+                    password=REDIS_PASSWORD,
+                    decode_responses=True,
+                )
+                # Test connection
+                self.redis.ping()
+                logger.info(
+                    f"Connected to Redis at {REDIS_HOST}:{REDIS_PORT}/{REDIS_DB}"
+                )
+            except Exception as e:
+                logger.error(f"Failed to connect to Redis: {e}")
+                self.redis = None
+
+        # Load state from Redis if available
+        if self.redis:
+            self._load_state_from_redis()
+
         # Ensure base directory exists
         Path(BASE_DATA_DIR).mkdir(parents=True, exist_ok=True)
-        
+
         # Restore existing instances on startup
         self._restore_instances()
+
+    def _load_state_from_redis(self):
+        """Load saved instances and port allocations from Redis"""
+        try:
+            port_data = self.redis.hgetall('rathole:port_allocations')
+            self.port_allocations.update({int(p): sid for p, sid in port_data.items()})
+
+            for key in self.redis.scan_iter('rathole:instance:*'):
+                data = self.redis.get(key)
+                if not data:
+                    continue
+                info = json.loads(data)
+                self.instances[info['server_id']] = info
+        except Exception as e:
+            logger.error(f"Error loading state from Redis: {e}")
     
     def _restore_instances(self):
         """Restore instance tracking from existing directories"""
@@ -251,6 +297,10 @@ class RatholeInstanceManager:
                         self.instances[server_id] = instance_info
                         if rathole_port:
                             self.port_allocations[rathole_port] = server_id
+                            if self.redis:
+                                self.redis.hset('rathole:port_allocations', rathole_port, server_id)
+                        if self.redis:
+                            self.redis.set(f'rathole:instance:{server_id}', json.dumps(instance_info))
                         
                         logger.info(f"Restored instance {server_id}: running={is_running}, port={rathole_port}")
                         
@@ -288,15 +338,23 @@ class RatholeInstanceManager:
         # Note: This method should only be called when self.lock is already held
         for port in range(RATHOLE_PORT_START, RATHOLE_PORT_END + 1):
             if port not in self.port_allocations:
-                return port
+                if self.redis:
+                    if not self.redis.hexists('rathole:port_allocations', port):
+                        return port
+                else:
+                    return port
         return None
-    
+
     def _allocate_game_port(self) -> Optional[int]:
         """Allocate an available port for game traffic (tunnel endpoint)"""
         # Note: This method should only be called when self.lock is already held
         for port in range(GAME_PORT_START, GAME_PORT_END + 1):
             if port not in self.port_allocations:
-                return port
+                if self.redis:
+                    if not self.redis.hexists('rathole:port_allocations', port):
+                        return port
+                else:
+                    return port
         return None
     
     def _generate_server_config(self, server_id: str, original_game_port: int, rathole_port: int, tunnel_game_port: int, tunnel_query_port: Optional[int] = None) -> str:
@@ -356,6 +414,8 @@ nodelay = true
                     return {'status': 'error', 'message': 'No available Rathole control ports'}
                 # Mark rathole port as allocated immediately
                 self.port_allocations[rathole_port] = server_id
+                if self.redis:
+                    self.redis.hset('rathole:port_allocations', rathole_port, server_id)
                 
                 # Allocate a single tunnel port for both TCP and UDP game traffic
                 logger.info(f"Allocating tunnel game port for {server_id}")
@@ -365,6 +425,8 @@ nodelay = true
                     return {'status': 'error', 'message': 'No available tunnel game ports'}
                 # Mark game port as allocated immediately
                 self.port_allocations[tunnel_game_port] = server_id
+                if self.redis:
+                    self.redis.hset('rathole:port_allocations', tunnel_game_port, server_id)
                 
                 # Allocate tunnel query port if needed
                 tunnel_query_port = None
@@ -375,6 +437,8 @@ nodelay = true
                         return {'status': 'error', 'message': 'No available tunnel query ports'}
                     # Mark query port as allocated immediately
                     self.port_allocations[tunnel_query_port] = server_id
+                    if self.redis:
+                        self.redis.hset('rathole:port_allocations', tunnel_query_port, server_id)
                 
                 logger.info(f"Allocated ports for {server_id}: rathole={rathole_port}, tunnel_game={tunnel_game_port}, tunnel_query={tunnel_query_port}")
                 
@@ -407,6 +471,21 @@ nodelay = true
                 )
                 
                 logger.info(f"Started process with PID: {process.pid}")
+
+                # Verify process started successfully
+                time.sleep(1)
+                if process.poll() is not None:
+                    error_msg = f"Rathole process for {server_id} exited immediately"
+                    logger.error(error_msg)
+                    with open(log_file, 'r') as lf:
+                        log_content = lf.read()
+                    # Cleanup allocations
+                    for port in [rathole_port, tunnel_game_port, tunnel_query_port]:
+                        if port and port in self.port_allocations:
+                            del self.port_allocations[port]
+                            if self.redis:
+                                self.redis.hdel('rathole:port_allocations', port)
+                    return {'status': 'error', 'message': error_msg, 'log': log_content}
                 
                 # Save PID
                 with open(pid_file, 'w') as f:
@@ -430,6 +509,8 @@ nodelay = true
                 }
                 
                 self.instances[server_id] = instance_info
+                if self.redis:
+                    self.redis.set(f'rathole:instance:{server_id}', json.dumps(instance_info))
                 # Port allocations were already done immediately after each allocation above
                 
                 logger.info(f"Created Rathole instance {server_id}: rathole_port={rathole_port}, tunnel_game_port={tunnel_game_port}, tunnel_query_port={tunnel_query_port}")
@@ -489,6 +570,8 @@ nodelay = true
                 for port in [rathole_port, tunnel_game_tcp_port, tunnel_game_udp_port, tunnel_query_port]:
                     if port and port in self.port_allocations:
                         del self.port_allocations[port]
+                        if self.redis:
+                            self.redis.hdel('rathole:port_allocations', port)
                 
                 # Remove instance directory
                 config_dir = Path(instance_info['config_dir'])
@@ -497,7 +580,9 @@ nodelay = true
                 
                 # Remove from tracking
                 del self.instances[server_id]
-                
+                if self.redis:
+                    self.redis.delete(f'rathole:instance:{server_id}')
+
                 logger.info(f"Removed Rathole instance {server_id}")
                 
                 return {'status': 'success', 'message': f'Instance {server_id} removed'}
@@ -513,6 +598,15 @@ nodelay = true
     def list_instances(self) -> Dict[str, Any]:
         """List all instances"""
         return dict(self.instances)
+
+    def shutdown_all_instances(self) -> Dict[str, Any]:
+        """Force stop and remove all instances"""
+        removed = []
+        for server_id in list(self.instances.keys()):
+            res = self.remove_instance(server_id)
+            if res.get('status') == 'success':
+                removed.append(server_id)
+        return {'status': 'success', 'removed': removed, 'remaining': list(self.instances.keys())}
     
     def get_client_config(self, server_id: str, host_ip: str) -> Optional[str]:
         """Generate client configuration for a specific server"""
@@ -764,6 +858,35 @@ def admin_remove_instance(server_id):
             
     except Exception as e:
         logger.error(f"Error in admin_remove_instance endpoint: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/instances/<server_id>/log', methods=['GET'])
+@require_auth([Role.ADMIN, Role.SERVICE_ACCOUNT])
+def admin_get_instance_log(server_id):
+    """Retrieve log file for an instance"""
+    try:
+        instance = rathole_manager.get_instance(server_id)
+        if not instance:
+            return jsonify({'status': 'error', 'message': 'Instance not found'}), 404
+        log_path = Path(instance['config_dir']) / 'rathole.log'
+        if not log_path.exists():
+            return jsonify({'status': 'error', 'message': 'Log file not found'}), 404
+        with open(log_path, 'r') as f:
+            content = f.read()
+        return jsonify({'status': 'success', 'log': content})
+    except Exception as e:
+        logger.error(f"Error getting log for {server_id}: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/sanity-check', methods=['POST'])
+@require_auth([Role.ADMIN, Role.SERVICE_ACCOUNT])
+def admin_sanity_check():
+    """Force shutdown of all tunnels and verify closure"""
+    try:
+        result = rathole_manager.shutdown_all_instances()
+        return jsonify(result), 200
+    except Exception as e:
+        logger.error(f"Error in sanity check: {e}")
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':

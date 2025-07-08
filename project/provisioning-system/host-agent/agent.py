@@ -369,6 +369,13 @@ def stop_rathole_client(server_id):
         print(f"Failed to stop Rathole client for {server_id}: {str(e)}")
         return False
 
+def stop_all_rathole_clients():
+    """Stop all running Rathole clients"""
+    results = {}
+    for sid in list(rathole_clients.keys()):
+        results[sid] = stop_rathole_client(sid)
+    return results
+
 def remove_tunnel_instance(server_id):
     """Remove tunnel instance from the rathole instance manager"""
     try:
@@ -853,6 +860,15 @@ def configure_rathole_client_endpoint(server_id):
             'status': 'error',
             'message': str(e)
         }), 500
+
+@app.route('/api/rathole/clients/shutdown-all', methods=['POST'])
+def shutdown_all_clients_endpoint():
+    """Stop all Rathole clients on this agent"""
+    try:
+        result = stop_all_rathole_clients()
+        return jsonify({'status': 'success', 'stopped': result})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 def start_rathole_client_with_config(server_id, config_path):
     """Start Rathole client with a specific config file"""

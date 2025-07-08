@@ -152,6 +152,15 @@ curl -H "Content-Type: application/json" \
 | `RATHOLE_PORT_START` | `10000` | Port range start |
 | `RATHOLE_PORT_END` | `20000` | Port range end |
 
+### Redis (Optional)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `REDIS_HOST` |  | Redis host for persistent state |
+| `REDIS_PORT` | `6379` | Redis port |
+| `REDIS_DB` | `0` | Redis database index |
+| `REDIS_PASSWORD` |  | Redis password (optional) |
+
 ## Security Considerations
 
 ### Production Deployment
