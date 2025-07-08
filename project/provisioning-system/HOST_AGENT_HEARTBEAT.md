@@ -7,7 +7,7 @@ The host-agent implements a robust registration and heartbeat system to maintain
 
 ### Initial Registration
 1. **On Startup**: Host-agent automatically registers with orchestrator
-2. **Endpoint**: `POST /api/nodes/register`
+2. **Endpoint**: `POST /api/nodes`
 3. **Data Sent**:
    ```json
    {
