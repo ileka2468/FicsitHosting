@@ -26,6 +26,12 @@ ORCHESTRATOR_HOST = os.environ.get('ORCHESTRATOR_HOST', 'satisfactory-orchestrat
 ORCHESTRATOR_PORT = os.environ.get('ORCHESTRATOR_PORT', '8080')
 ORCHESTRATOR_URL = f"http://{ORCHESTRATOR_HOST}:{ORCHESTRATOR_PORT}"
 
+# When running in Docker compose during development the orchestrator can
+# reliably reach the host agent using the container hostname. In
+# production we still want to advertise the real IP address. This flag
+# toggles which value is sent during registration.
+USE_HOSTNAME_REGISTRATION = os.environ.get('USE_HOSTNAME_REGISTRATION', 'false').lower() == 'true'
+
 # Rathole Configuration
 RATHOLE_INSTANCE_MANAGER_HOST = os.environ.get('RATHOLE_INSTANCE_MANAGER_HOST', 'satisfactory-rathole-server')
 RATHOLE_INSTANCE_MANAGER_PORT = os.environ.get('RATHOLE_INSTANCE_MANAGER_PORT', '7001')
@@ -949,11 +955,14 @@ def register_with_orchestrator():
     for attempt in range(max_retries):
         try:
             hostname = socket.gethostname()
-            # Try to get the actual IP address
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            s.connect(("8.8.8.8", 80))
-            ip_address = s.getsockname()[0]
-            s.close()
+            if USE_HOSTNAME_REGISTRATION:
+                ip_address = hostname
+            else:
+                # Try to get the actual IP address of the container
+                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                s.connect(("8.8.8.8", 80))
+                ip_address = s.getsockname()[0]
+                s.close()
             
             registration_data = {
                 'nodeId': NODE_ID,
@@ -963,7 +972,7 @@ def register_with_orchestrator():
             }
             
             response = requests.post(
-                f"{ORCHESTRATOR_URL}/api/nodes/register",
+                f"{ORCHESTRATOR_URL}/api/nodes",
                 json=registration_data,
                 timeout=10
             )

@@ -61,6 +61,7 @@ networks:
 - Split `ORCHESTRATOR_URL` into `ORCHESTRATOR_HOST` and `ORCHESTRATOR_PORT`
 - Added `HOST_AGENT_PORT` and `HOST_AGENT_API_KEY`
 - Updated variable naming for consistency
+- Added `USE_HOSTNAME_REGISTRATION` to register with container hostname in development
 
 **File**: `agent.py`
 
