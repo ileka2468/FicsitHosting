@@ -222,7 +222,7 @@ def get_rathole_client_config_from_manager(server_id):
             host_ip = server_id
         else:
             # bind on all interfaces (or loopback) so your game can connect
-            host_ip = '0.0.0.0'
+            host_ip = '127.0.0.1'  # Default to localhost
             # —or— if you prefer limiting to localhost:
             # host_ip = '127.0.0.1'
 
