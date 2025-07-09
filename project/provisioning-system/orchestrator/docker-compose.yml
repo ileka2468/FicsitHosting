@@ -73,6 +73,8 @@ services:
       # JPA Configuration
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
       SPRING_JPA_SHOW_SQL: ${SHOW_SQL}
+
+      AUTH_SERVICE_URL: ${AUTH_SERVICE_URL}
       
       # Logging
       LOGGING_LEVEL_COM_SATISFACTORYHOST_ORCHESTRATOR: ${LOG_LEVEL}

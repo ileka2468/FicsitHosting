@@ -1,0 +1,30 @@
+[client]
+remote_addr = "rathole-instance-manager:20002"
+default_token = "your-api-control-token-here"
+heartbeat_timeout = 40
+retry_interval = 1
+
+[client.transport]
+type = "tcp"
+
+[client.transport.tcp]
+keepalive_secs = 5
+keepalive_interval = 2
+
+[client.services.srv_efand_3df0e27b_game_tcp]
+type = "tcp"
+token = "your-api-control-token-here"
+local_addr = "srv_efand_3df0e27b:30002"
+nodelay = true
+
+[client.services.srv_efand_3df0e27b_game_udp]
+type = "udp"
+token = "your-api-control-token-here"
+local_addr = "srv_efand_3df0e27b:30002"
+nodelay = true
+
+[client.services.srv_efand_3df0e27b_query]
+type = "tcp"
+token = "your-api-control-token-here"
+local_addr = "srv_efand_3df0e27b:30003"
+nodelay = true

@@ -33,7 +33,7 @@ ORCHESTRATOR_URL = f"http://{ORCHESTRATOR_HOST}:{ORCHESTRATOR_PORT}"
 USE_HOSTNAME_REGISTRATION = os.environ.get('USE_HOSTNAME_REGISTRATION', 'false').lower() == 'true'
 
 # Rathole Configuration
-RATHOLE_INSTANCE_MANAGER_HOST = os.environ.get('RATHOLE_INSTANCE_MANAGER_HOST', 'satisfactory-rathole-server')
+RATHOLE_INSTANCE_MANAGER_HOST = '69.164.196.13' # Replace with your rathole instance manager host
 RATHOLE_INSTANCE_MANAGER_PORT = os.environ.get('RATHOLE_INSTANCE_MANAGER_PORT', '7001')
 RATHOLE_TOKEN = os.environ.get('RATHOLE_TOKEN', 'your-api-control-token-here')
 RATHOLE_CLIENT_BINARY = os.environ.get('RATHOLE_CLIENT_BINARY', '/usr/local/bin/rathole')
@@ -42,7 +42,7 @@ RATHOLE_CLIENT_BINARY = os.environ.get('RATHOLE_CLIENT_BINARY', '/usr/local/bin/
 USE_HTTPS_RATHOLE = os.environ.get('USE_HTTPS_RATHOLE', 'false').lower() == 'true'
 ACCESS_TOKEN = os.environ.get('ACCESS_TOKEN', None)  # Access token from orchestrator
 LEGACY_AUTH_ENABLED = os.environ.get('LEGACY_AUTH_ENABLED', 'true').lower() == 'true'
-USE_CONTAINER_HOSTNAMES = os.environ.get('USE_CONTAINER_HOSTNAMES', 'true').lower() == 'true'
+USE_CONTAINER_HOSTNAMES = os.environ.get('USE_CONTAINER_HOSTNAMES', 'false').lower() == 'true'
 
 # Heartbeat Configuration (configurable via environment variables)
 HEARTBEAT_INTERVAL = int(os.environ.get('HEARTBEAT_INTERVAL', '60'))  # seconds
@@ -216,11 +216,15 @@ def get_rathole_client_config_from_manager(server_id):
         base_url = get_rathole_base_url()
         headers = get_auth_headers()
 
-        # Determine how to reach the game server container
+        # Determine how to bind the rathole‐client listener
         if USE_CONTAINER_HOSTNAMES:
+            # in dev you really want container DNS resolution
             host_ip = server_id
         else:
-            host_ip = get_container_ip(server_id) or '127.0.0.1'
+            # bind on all interfaces (or loopback) so your game can connect
+            host_ip = '0.0.0.0'
+            # —or— if you prefer limiting to localhost:
+            # host_ip = '127.0.0.1'
 
         params = {'host_ip': host_ip}
         
@@ -260,7 +264,7 @@ def generate_rathole_client_config(server_id, server_name, game_port, beacon_por
     # Fallback to local generation (should not be used in individual instance mode)
     print(f"Warning: Using fallback config generation for {server_id}")
     # Determine how to address the Satisfactory server container locally
-    host_part = server_id if USE_CONTAINER_HOSTNAMES else (get_container_ip(server_id) or '127.0.0.1')
+    host_part = server_id if USE_CONTAINER_HOSTNAMES else '0.0.0.0'
 
     config = f"""
 [client]

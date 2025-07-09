@@ -1,0 +1,30 @@
+[client]
+remote_addr = "69.164.196.13:20004"
+default_token = "your-api-control-token-here"
+heartbeat_timeout = 40
+retry_interval = 1
+
+[client.transport]
+type = "tcp"
+
+[client.transport.tcp]
+keepalive_secs = 5
+keepalive_interval = 2
+
+[client.services.srv_Tester_b7de8c54_game_tcp]
+type = "tcp"
+token = "your-api-control-token-here"
+local_addr = "172.22.0.4:30016"
+nodelay = true
+
+[client.services.srv_Tester_b7de8c54_game_udp]
+type = "udp"
+token = "your-api-control-token-here"
+local_addr = "172.22.0.4:30016"
+nodelay = true
+
+[client.services.srv_Tester_b7de8c54_query]
+type = "tcp"
+token = "your-api-control-token-here"
+local_addr = "172.22.0.4:30017"
+nodelay = true

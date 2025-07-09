@@ -13,9 +13,9 @@ services:
       - "40000-40100:40000-40100/udp"  # Port range for tunneled game traffic (UDP)
     environment:
       # === REQUIRED: Update these values ===
-      - PUBLIC_HOST_IP=192.168.20.100  #  Actual host/LAN IP
+      - PUBLIC_HOST_IP=69.164.196.13  #  Actual host/LAN IP
       - PUBLIC_IP=${PUBLIC_IP:-0.0.0.0}  # For server binding (optional, defaults to 0.0.0.0)
-      - INTERNAL_SERVER_HOST=${INTERNAL_SERVER_HOST:-rathole-instance-manager}
+      - INTERNAL_SERVER_HOST=69.164.196.13
       # === Security Configuration ===
       - AUTH_SERVICE_URL=${AUTH_SERVICE_URL:-http://auth-service:8081}
       - USE_HTTPS=${USE_HTTPS:-false}
@@ -44,9 +44,8 @@ services:
       - rathole_logs:/var/log/rathole
       - ./certs:/certs:ro        # SSL certificates (optional, create directory if using HTTPS)
     networks:
-      - satis_network
-      - auth-service_auth-network                # Network for auth service communication
-      - orchestrator_satisfactory-network      # Network for orchestrator communication
+      - rathole_network
+      - auth-service_auth-network  # Connect to the auth service network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:7001/health"]
       interval: 30s
@@ -59,11 +58,8 @@ volumes:
     driver: local
   rathole_logs:
     driver: local
-
 networks:
-  satis_network:
-    external: true
+  rathole_network:
+    driver: bridge
   auth-service_auth-network:
-    external: true
-  orchestrator_satisfactory-network:
-    external: true
+    external: true  # Use the existing auth service network
