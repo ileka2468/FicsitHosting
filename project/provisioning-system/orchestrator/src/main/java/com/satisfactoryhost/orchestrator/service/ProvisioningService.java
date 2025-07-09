@@ -383,7 +383,7 @@ public class ProvisioningService {
         gameServerRepository.save(server);
         
         // Send start request to host agent
-        hostAgentService.startContainer(server.getNode().getIpAddress(), serverId)
+        hostAgentService.startContainer(server.getNode().getIpAddress(), serverId, jwt)
             .subscribe(
                 response -> {
                     server.setStatus(GameServer.ServerStatus.RUNNING);

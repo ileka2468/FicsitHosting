@@ -104,19 +104,31 @@ public class HostAgentService {
     /**
      * Start a container on a host agent
      */
-    public Mono<Map<String, Object>> startContainer(String nodeIpAddress, String serverId) {
+    public Mono<Map<String, Object>> startContainer(String nodeIpAddress, String serverId, String accessToken) {
         WebClient webClient = webClientBuilder.build();
         
         Map<String, String> request = new HashMap<>();
         request.put("serverId", serverId);
-        
-        return webClient.post()
-                .uri("http://" + nodeIpAddress + ":" + hostAgentPort + "/api/containers/start")
+
+        WebClient.RequestBodySpec requestSpec = webClient.post()
+                .uri("http://" + nodeIpAddress + ":" + hostAgentPort + "/api/containers/start");
+
+        // Add authorization header if access token is provided
+        if (accessToken != null && !accessToken.trim().isEmpty()) {
+            // Check if token already has "Bearer " prefix
+            if (accessToken.startsWith("Bearer ")) {
+                requestSpec = requestSpec.header("Authorization", accessToken);
+            } else {
+                requestSpec = requestSpec.header("Authorization", "Bearer " + accessToken);
+            }
+        }
+
+        return requestSpec
                 .bodyValue(request)
                 .retrieve()
                 .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {});
     }
-    
+        
     /**
      * Update container configuration
      */

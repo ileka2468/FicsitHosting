@@ -365,34 +365,25 @@ class RatholeInstanceManager:
         port for both protocols.
         """
         # Base configuration for the server
-        config = f"""[server]
-bind_addr = "{PUBLIC_IP}:{rathole_port}"
-default_token = "{API_TOKEN}"
-heartbeat_interval = 30
+        config = f"""
+        [server]
+        bind_addr = "{PUBLIC_IP}:{rathole_port}"
+        default_token = "{API_TOKEN}"
 
-[server.transport]
-type = "tcp"
+        [server.services.{server_id}_game_tcp]
+        type = "tcp"
+        bind_addr = "{PUBLIC_IP}:{tunnel_game_port}"
 
-[server.services.{server_id}_game_tcp]
-type = "tcp"
-token = "{API_TOKEN}"
-bind_addr = "{PUBLIC_IP}:{tunnel_game_port}"
-nodelay = true
-
-[server.services.{server_id}_game_udp]
-type = "udp"
-token = "{API_TOKEN}"
-bind_addr = "{PUBLIC_IP}:{tunnel_game_port}"
-nodelay = true
+        [server.services.{server_id}_game_udp]
+        type = "udp"
+        bind_addr = "{PUBLIC_IP}:{tunnel_game_port}"
 """
         # Conditionally add the query API service if a query port is provided (TCP only)
         if tunnel_query_port:
             config += f"""
-[server.services.{server_id}_query]
-type = "tcp"
-token = "{API_TOKEN}"
-bind_addr = "{PUBLIC_IP}:{tunnel_query_port}"
-nodelay = true
+        [server.services.{server_id}_query]
+        type = "tcp"
+        bind_addr = "{PUBLIC_IP}:{tunnel_query_port}"
 """
         return config
     
@@ -619,40 +610,26 @@ nodelay = true
         original_query_port = instance_info['query_port']
         
         # Base client configuration
-        config = f"""[client]
-remote_addr = "{INTERNAL_SERVER_HOST}:{rathole_port}"
-default_token = "{API_TOKEN}"
-heartbeat_timeout = 40
-retry_interval = 1
+        config = f"""
+        [client]
+        remote_addr = "{INTERNAL_SERVER_HOST}:{rathole_port}"
+        default_token = "{API_TOKEN}"
 
-[client.transport]
-type = "tcp"
+        [client.services.{server_id}_game_tcp]
+        type = "tcp"
+        local_addr = "{host_ip}:{original_game_port}"
 
-[client.transport.tcp]
-keepalive_secs = 5
-keepalive_interval = 2
-
-[client.services.{server_id}_game_tcp]
-type = "tcp"
-token = "{API_TOKEN}"
-local_addr = "{host_ip}:{original_game_port}"
-nodelay = true
-
-[client.services.{server_id}_game_udp]
-type = "udp"
-token = "{API_TOKEN}"
-local_addr = "{host_ip}:{original_game_port}"
-nodelay = true
+        [client.services.{server_id}_game_udp]
+        type = "udp"
+        local_addr = "{host_ip}:{original_game_port}"
 """
         
         # Conditionally add the query API service if a query port exists
         if original_query_port:
             config += f"""
-[client.services.{server_id}_query]
-type = "tcp"
-token = "{API_TOKEN}"
-local_addr = "{host_ip}:{original_query_port}"
-nodelay = true
+            [client.services.{server_id}_query]
+            type = "tcp"
+            local_addr = "{host_ip}:{original_query_port}"
 """
         
         return config
