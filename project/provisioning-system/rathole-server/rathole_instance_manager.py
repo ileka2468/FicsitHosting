@@ -281,11 +281,12 @@ class RatholeInstanceManager:
                                     pid_file.unlink()
                         
                         # Read config to get port info
-                        game_port, query_port, rathole_port = self._parse_config_ports(config_file)
+                        game_tcp_port, game_udp_port, query_port, rathole_port = self._parse_config_ports(config_file)
                         
                         instance_info = {
                             'server_id': server_id,
-                            'game_port': game_port,
+                            'tunnel_game_tcp_port': game_tcp_port,
+                            'tunnel_game_udp_port': game_udp_port,
                             'query_port': query_port,
                             'rathole_port': rathole_port,
                             'config_dir': str(instance_dir),
@@ -295,10 +296,11 @@ class RatholeInstanceManager:
                         }
                         
                         self.instances[server_id] = instance_info
-                        if rathole_port:
-                            self.port_allocations[rathole_port] = server_id
-                            if self.redis:
-                                self.redis.hset('rathole:port_allocations', rathole_port, server_id)
+                        for port in [rathole_port, game_tcp_port, game_udp_port, query_port]:
+                            if port:
+                                self.port_allocations[port] = server_id
+                                if self.redis:
+                                    self.redis.hset('rathole:port_allocations', port, server_id)
                         if self.redis:
                             self.redis.set(f'rathole:instance:{server_id}', json.dumps(instance_info))
                         
@@ -316,22 +318,19 @@ class RatholeInstanceManager:
             # Simple parsing - look for bind_addr patterns
             import re
             
-            # Main server bind address
-            server_match = re.search(r'bind_addr\s*=\s*"[^:]*:(\d+)"', content)
-            rathole_port = int(server_match.group(1)) if server_match else None
-            
-            # Service ports (game and query API)
-            service_matches = re.findall(r'local_addr\s*=\s*"[^:]*:(\d+)"', content)
-            ports = [int(p) for p in service_matches] if service_matches else []
-            
-            game_port = ports[0] if len(ports) > 0 else None
-            query_port = ports[1] if len(ports) > 1 else None
-            
-            return game_port, query_port, rathole_port
+            import re
+
+            matches = re.findall(r'bind_addr\s*=\s*"[^:]*:(\d+)"', content)
+            rathole_port = int(matches[0]) if len(matches) > 0 else None
+            game_tcp_port = int(matches[1]) if len(matches) > 1 else None
+            game_udp_port = int(matches[2]) if len(matches) > 2 else None
+            query_port = int(matches[3]) if len(matches) > 3 else None
+
+            return game_tcp_port, game_udp_port, query_port, rathole_port
             
         except Exception as e:
             logger.error(f"Error parsing config {config_file}: {e}")
-            return None, None, None
+            return None, None, None, None
     
     def _allocate_rathole_port(self) -> Optional[int]:
         """Allocate an available port for a new Rathole server instance"""
@@ -357,13 +356,17 @@ class RatholeInstanceManager:
                     return port
         return None
     
-    def _generate_server_config(self, server_id: str, original_game_port: int, rathole_port: int, tunnel_game_port: int, tunnel_query_port: Optional[int] = None) -> str:
-        """Generate Rathole server configuration for a specific game server.
+    def _generate_server_config(
+        self,
+        server_id: str,
+        original_game_port: int,
+        rathole_port: int,
+        tunnel_game_tcp_port: int,
+        tunnel_game_udp_port: int,
+        tunnel_query_port: Optional[int] = None,
+    ) -> str:
+        """Generate Rathole server configuration for a specific game server."""
 
-        The game TCP and UDP services use the same public port. This simplifies
-        client connectivity as some games (like Satisfactory) expect the same
-        port for both protocols.
-        """
         # Base configuration for the server
         config = f"""[server]
 bind_addr = "{PUBLIC_IP}:{rathole_port}"
@@ -376,13 +379,13 @@ type = "tcp"
 [server.services.{server_id}_game_tcp]
 type = "tcp"
 token = "{API_TOKEN}"
-bind_addr = "{PUBLIC_IP}:{tunnel_game_port}"
+bind_addr = "{PUBLIC_IP}:{tunnel_game_tcp_port}"
 nodelay = true
 
 [server.services.{server_id}_game_udp]
 type = "udp"
 token = "{API_TOKEN}"
-bind_addr = "{PUBLIC_IP}:{tunnel_game_port}"
+bind_addr = "{PUBLIC_IP}:{tunnel_game_udp_port}"
 nodelay = true
 """
         # Conditionally add the query API service if a query port is provided (TCP only)
@@ -417,16 +420,28 @@ nodelay = true
                 if self.redis:
                     self.redis.hset('rathole:port_allocations', rathole_port, server_id)
                 
-                # Allocate a single tunnel port for both TCP and UDP game traffic
-                logger.info(f"Allocating tunnel game port for {server_id}")
-                tunnel_game_port = self._allocate_game_port()
-                if not tunnel_game_port:
-                    logger.error(f"No available tunnel game ports for {server_id}")
-                    return {'status': 'error', 'message': 'No available tunnel game ports'}
-                # Mark game port as allocated immediately
-                self.port_allocations[tunnel_game_port] = server_id
+                # Allocate separate tunnel ports for TCP and UDP game traffic
+                logger.info(f"Allocating tunnel game TCP port for {server_id}")
+                tunnel_game_tcp_port = self._allocate_game_port()
+                if not tunnel_game_tcp_port:
+                    logger.error(f"No available tunnel game TCP ports for {server_id}")
+                    return {'status': 'error', 'message': 'No available tunnel game TCP ports'}
+                self.port_allocations[tunnel_game_tcp_port] = server_id
                 if self.redis:
-                    self.redis.hset('rathole:port_allocations', tunnel_game_port, server_id)
+                    self.redis.hset('rathole:port_allocations', tunnel_game_tcp_port, server_id)
+
+                logger.info(f"Allocating tunnel game UDP port for {server_id}")
+                tunnel_game_udp_port = self._allocate_game_port()
+                if not tunnel_game_udp_port:
+                    logger.error(f"No available tunnel game UDP ports for {server_id}")
+                    # cleanup previously allocated TCP port
+                    del self.port_allocations[tunnel_game_tcp_port]
+                    if self.redis:
+                        self.redis.hdel('rathole:port_allocations', tunnel_game_tcp_port)
+                    return {'status': 'error', 'message': 'No available tunnel game UDP ports'}
+                self.port_allocations[tunnel_game_udp_port] = server_id
+                if self.redis:
+                    self.redis.hset('rathole:port_allocations', tunnel_game_udp_port, server_id)
                 
                 # Allocate tunnel query port if needed
                 tunnel_query_port = None
@@ -440,7 +455,11 @@ nodelay = true
                     if self.redis:
                         self.redis.hset('rathole:port_allocations', tunnel_query_port, server_id)
                 
-                logger.info(f"Allocated ports for {server_id}: rathole={rathole_port}, tunnel_game={tunnel_game_port}, tunnel_query={tunnel_query_port}")
+                logger.info(
+                    f"Allocated ports for {server_id}: rathole={rathole_port}, "
+                    f"tcp={tunnel_game_tcp_port}, udp={tunnel_game_udp_port}, "
+                    f"query={tunnel_query_port}"
+                )
                 
                 # Create instance directory
                 instance_dir = Path(BASE_DATA_DIR) / server_id
@@ -449,7 +468,14 @@ nodelay = true
                 
                 # Generate configuration
                 logger.info(f"Generating configuration for {server_id}")
-                config_content = self._generate_server_config(server_id, game_port, rathole_port, tunnel_game_port, tunnel_query_port)
+                config_content = self._generate_server_config(
+                    server_id,
+                    game_port,
+                    rathole_port,
+                    tunnel_game_tcp_port,
+                    tunnel_game_udp_port,
+                    tunnel_query_port,
+                )
                 config_file = instance_dir / 'rathole-server.toml'
                 
                 with open(config_file, 'w') as f:
@@ -480,7 +506,12 @@ nodelay = true
                     with open(log_file, 'r') as lf:
                         log_content = lf.read()
                     # Cleanup allocations
-                    for port in [rathole_port, tunnel_game_port, tunnel_query_port]:
+                    for port in [
+                        rathole_port,
+                        tunnel_game_tcp_port,
+                        tunnel_game_udp_port,
+                        tunnel_query_port,
+                    ]:
                         if port and port in self.port_allocations:
                             del self.port_allocations[port]
                             if self.redis:
@@ -496,8 +527,8 @@ nodelay = true
                     'server_id': server_id,
                     'game_port': game_port,           # Original game server port
                     'query_port': query_port,         # Original query server port  
-                    'tunnel_game_tcp_port': tunnel_game_port,     # Public tunnel port for game TCP traffic
-                    'tunnel_game_udp_port': tunnel_game_port,     # Public tunnel port for game UDP traffic
+                    'tunnel_game_tcp_port': tunnel_game_tcp_port,     # Public tunnel port for game TCP traffic
+                    'tunnel_game_udp_port': tunnel_game_udp_port,     # Public tunnel port for game UDP traffic
                     'tunnel_query_port': tunnel_query_port,   # Public tunnel port for query traffic
                     'rathole_port': rathole_port,     # Rathole control port
                     'owner_id': owner_id,
@@ -513,7 +544,11 @@ nodelay = true
                     self.redis.set(f'rathole:instance:{server_id}', json.dumps(instance_info))
                 # Port allocations were already done immediately after each allocation above
                 
-                logger.info(f"Created Rathole instance {server_id}: rathole_port={rathole_port}, tunnel_game_port={tunnel_game_port}, tunnel_query_port={tunnel_query_port}")
+                logger.info(
+                    f"Created Rathole instance {server_id}: rathole_port={rathole_port}, "
+                    f"tcp_port={tunnel_game_tcp_port}, udp_port={tunnel_game_udp_port}, "
+                    f"query_port={tunnel_query_port}"
+                )
                 
                 return {
                     'status': 'success',
@@ -521,13 +556,13 @@ nodelay = true
                     'rathole_port': rathole_port,
                     'original_game_port': game_port,
                     'original_query_port': query_port,
-                    'tunnel_game_tcp_port': tunnel_game_port,
-                    'tunnel_game_udp_port': tunnel_game_port,
+                    'tunnel_game_tcp_port': tunnel_game_tcp_port,
+                    'tunnel_game_udp_port': tunnel_game_udp_port,
                     'tunnel_query_port': tunnel_query_port,
                     'config_dir': str(instance_dir),
                     'public_connection_info': {
-                        'game_tcp_address': f"{PUBLIC_HOST_IP}:{tunnel_game_port}",
-                        'game_udp_address': f"{PUBLIC_HOST_IP}:{tunnel_game_port}",
+                        'game_tcp_address': f"{PUBLIC_HOST_IP}:{tunnel_game_tcp_port}",
+                        'game_udp_address': f"{PUBLIC_HOST_IP}:{tunnel_game_udp_port}",
                         'query_address': f"{PUBLIC_HOST_IP}:{tunnel_query_port}" if tunnel_query_port else None
                     }
                 }
