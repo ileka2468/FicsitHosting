@@ -218,13 +218,9 @@ def get_rathole_client_config_from_manager(server_id):
 
         # Determine how to bind the rathole‐client listener
         if USE_CONTAINER_HOSTNAMES:
-            # in dev you really want container DNS resolution
             host_ip = server_id
         else:
-            # bind on all interfaces (or loopback) so your game can connect
-            host_ip = '127.0.0.1'  # Default to localhost
-            # —or— if you prefer limiting to localhost:
-            # host_ip = '127.0.0.1'
+            host_ip = get_container_ip(server_id)
 
         params = {'host_ip': host_ip}
         
@@ -1171,6 +1167,7 @@ def restart_threads():
 def extract_access_token():
     """Extract access token from Authorization header for forwarding to Rathole manager"""
     auth_header = request.headers.get('Authorization')
+    print(auth_header)  # Debug: print the full header for visibility
     print(f"DEBUG: before_request - Auth header: {auth_header[:50] if auth_header else 'None'}...")
     if auth_header and auth_header.startswith('Bearer '):
         # Extract the token without the 'Bearer ' prefix

@@ -2,8 +2,8 @@ networks:
   satis_network:
     external: true
 services:
-  srv_Tester_3b639d42:
-    container_name: srv_Tester_3b639d42
+  srv_Tester_0a5f98a9:
+    container_name: srv_Tester_0a5f98a9
     deploy:
       resources:
         limits:
@@ -16,20 +16,20 @@ services:
       MAXPLAYERS: '20'
       PGID: '1000'
       PUID: '1000'
-      SERVERGAMEPORT: '30014'
-      SERVERMESSAGINGPORT: '30015'
+      SERVERGAMEPORT: '30000'
+      SERVERMESSAGINGPORT: '30001'
       SERVER_PASSWORD: '1234'
       SKIPUPDATE: 'false'
       STEAMBETA: 'false'
       TIMEOUT: '30'
-    hostname: srv_Tester_3b639d42
+    hostname: srv_Tester_0a5f98a9
     image: wolveix/satisfactory-server:latest
     networks:
     - satis_network
     ports:
-    - 30014:30014/udp
-    - 30014:30014/tcp
-    - 30015:30015/tcp
+    - 30000:30000/udp
+    - 30000:30000/tcp
+    - 30001:30001/tcp
     restart: unless-stopped
     volumes:
-    - ./data/srv_Tester_3b639d42:/config
+    - ./data/srv_Tester_0a5f98a9:/config

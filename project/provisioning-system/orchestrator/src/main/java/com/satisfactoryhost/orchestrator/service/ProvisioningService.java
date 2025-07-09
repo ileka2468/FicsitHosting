@@ -234,7 +234,7 @@ public class ProvisioningService {
         gameServerRepository.save(server);
         
         // Send stop request to host agent
-        hostAgentService.stopContainer(server.getNode().getIpAddress(), serverId)
+        hostAgentService.stopContainer(server.getNode().getIpAddress(), serverId, jwt)
             .subscribe(
                 response -> {
                     server.setStatus(GameServer.ServerStatus.STOPPED);

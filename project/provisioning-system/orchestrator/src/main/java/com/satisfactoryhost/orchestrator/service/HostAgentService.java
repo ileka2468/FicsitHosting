@@ -57,8 +57,8 @@ public class HostAgentService {
     /**
      * Stop a container on a host agent
      */
-    public Mono<Map<String, Object>> stopContainer(String nodeIpAddress, String serverId) {
-        return stopContainer(nodeIpAddress, serverId, "stop");
+    public Mono<Map<String, Object>> stopContainer(String nodeIpAddress, String serverId, String accessToken) {
+        return stopContainer(nodeIpAddress, serverId, "stop", accessToken);
     }
     
     /**
@@ -268,8 +268,18 @@ public class HostAgentService {
     /**
      * Stop container with cleanup type
      */
-    public Mono<Map<String, Object>> stopContainer(String nodeIpAddress, String serverId, String cleanupType) {
+    public Mono<Map<String, Object>> stopContainer(String nodeIpAddress, String serverId, String cleanupType, String accessToken) {
         WebClient webClient = webClientBuilder.build();
+
+        // Add authorization header if access token is provided
+        if (accessToken != null && !accessToken.trim().isEmpty()) {
+            // Check if token already has "Bearer " prefix
+            if (accessToken.startsWith("Bearer ")) {
+                webClient = webClient.mutate().defaultHeader("Authorization", accessToken).build();
+            } else {
+                webClient = webClient.mutate().defaultHeader("Authorization", "Bearer " + accessToken).build();
+            }
+        }
         
         Map<String, String> request = new HashMap<>();
         request.put("serverId", serverId);
