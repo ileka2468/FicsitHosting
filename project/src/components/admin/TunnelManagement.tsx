@@ -131,7 +131,7 @@ export const TunnelManagement: React.FC = () => {
       {/* Header */}
       <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl p-6 border border-slate-700">
         <h2 className="text-2xl font-bold text-white mb-2">Tunnel Management</h2>
-        <p className="text-slate-400">Manage Rathole tunnel instances for server connectivity</p>
+        <p className="text-slate-400">Manage FRP tunnel instances for server connectivity</p>
       </div>
 
       {/* Error Display */}
