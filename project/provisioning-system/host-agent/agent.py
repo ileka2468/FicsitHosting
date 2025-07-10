@@ -76,76 +76,65 @@ def generate_satisfactory_config(server_name, max_players, game_port, beacon_por
     }
     return config
 
-def generate_docker_compose_config(server_id, server_name, game_port, beacon_port, ram_allocation, cpu_allocation, max_players, server_password, environment_vars):
-    """Generate Docker Compose configuration for a Satisfactory server"""
-    
-    # Validate and set defaults for resource allocations
-    if ram_allocation is None or ram_allocation <= 0:
-        ram_allocation = 4  # Default to 4GB
-    if cpu_allocation is None or cpu_allocation <= 0:
-        cpu_allocation = 2  # Default to 2 CPU cores
-    
-    # Merge environment variables with defaults
+def generate_docker_compose_config(
+        server_id, server_name,
+        game_port, beacon_port,
+        ram_allocation, cpu_allocation,
+        max_players, server_password,
+        environment_vars
+):
+    """Compose file that keeps container & public ports identical."""
+
+    ram_allocation = ram_allocation or 4
+    cpu_allocation = cpu_allocation or 2
+
     env_vars = {
-        'PUID': '1000',
-        'PGID': '1000',
-        'MAXPLAYERS': str(max_players),
-        'SERVERGAMEPORT': str(game_port),
-        'SERVERMESSAGINGPORT': str(beacon_port),
-        'AUTOSAVENUM': '5',
-        'STEAMBETA': 'false',
-        'SKIPUPDATE': 'false',
-        'TIMEOUT': '30'
+        "PUID": "1000",
+        "PGID": "1000",
+        "MAXPLAYERS": str(max_players),
+        "AUTOSAVENUM": "5",
+        "STEAMBETA": "false",
+        "SKIPUPDATE": "false",
+        "TIMEOUT": "30",
+        # ✨ NEW – tell the image which ports it must *both bind and advertise*
+        "SERVERGAMEPORT": str(game_port),       # 7777 replacement
+        "SERVERMESSAGINGPORT": str(beacon_port) # 8888 replacement
     }
-    
-    # Add server password if provided
-    if server_password:
-        env_vars['SERVER_PASSWORD'] = server_password
-    
-    # Override with environment variables from orchestrator
-    env_vars.update(environment_vars)
-    
-    compose_config = {
-        'services': {
+    env_vars.update(environment_vars or {})
+
+    compose = {
+        "services": {
             server_id: {
-                'container_name': server_id,
-                'hostname': server_id,
-                'image': 'wolveix/satisfactory-server:latest',
-                'ports': [
-                    f'{game_port}:{game_port}/udp',   # game traffic
-                    f'{game_port}:{game_port}/tcp',   # game API socket
-                    f'{beacon_port}:{beacon_port}/tcp',# messaging/beacon
+                "image": "wolveix/satisfactory-server:latest",
+                "container_name": server_id,
+                "hostname": server_id,
+                # 1 : 1 mapping – no remap, no NAT mismatch
+                "ports": [
+                    f"{game_port}:{game_port}/udp",
+                    f"{game_port}:{game_port}/tcp",
+                    f"{beacon_port}:{beacon_port}/tcp"
                 ],
-                'volumes': [
-                    f'./data/{server_id}:/config'
-                ],
-                'environment': env_vars,
-                'restart': 'unless-stopped',
-                'networks': ['satis_network'],  # Join the shared network
-                'deploy': {
-                    'resources': {
-                        'limits': {
-                            'memory': f'{ram_allocation}G'
+                "volumes": [f"./data/{server_id}:/config"],
+                "environment": env_vars,
+                "restart": "unless-stopped",
+                "networks": ["satis_network"],
+                "deploy": {
+                    "resources": {
+                        "limits": {
+                            "memory": f"{ram_allocation}G",
+                            "cpus": str(cpu_allocation)
                         },
-                        'reservations': {
-                            'memory': f'{max(1, ram_allocation//2)}G'
+                        "reservations": {
+                            "memory": f"{max(1, ram_allocation // 2)}G"
                         }
                     }
                 }
             }
         },
-        'networks': {
-            'satis_network': {
-                'external': True  # Use existing network created by host agent
-            }
-        }
+        "networks": {"satis_network": {"external": True}}
     }
-    
-    # Add CPU limits if supported (note: cpu_count in docker-py vs cpus in compose)
-    if cpu_allocation:
-        compose_config['services'][server_id]['deploy']['resources']['limits']['cpus'] = str(cpu_allocation)
-    
-    return compose_config
+    return compose
+
 
 def get_auth_headers():
     """Get authentication headers for rathole manager API calls"""
@@ -276,33 +265,26 @@ local_addr = "{host_part}:{beacon_port}"
     return config
 
 def start_rathole_client(server_id, server_name, game_port, beacon_port):
-    """Start a Rathole client process for a specific server"""
+    """Launch a Rathole client whose tunnel ports match the container’s bind ports."""
     try:
-        # Step 1: Create tunnel instance on the rathole instance manager
+        # 1️⃣ Create (or refresh) the tunnel instance
         if not create_tunnel_instance(server_id, game_port, beacon_port):
             print(f"Failed to create tunnel instance for {server_id}")
             return False
-        
-        # Create rathole client config directory
-        rathole_dir = f'/data/rathole/{server_id}'
+
+        # 2️⃣ Prepare the client.cfg on disk
+        rathole_dir = f"/data/rathole/{server_id}"
         os.makedirs(rathole_dir, exist_ok=True)
-        
-        # Generate client configuration (this will now get it from the manager)
-        config_content = generate_rathole_client_config(server_id, server_name, game_port, beacon_port)
-        config_path = f'{rathole_dir}/client.toml'
-        
-        with open(config_path, 'w') as f:
-            f.write(config_content)
-        
-        print(f"Generated Rathole client config for {server_id}:")
-        print(f"  Config file: {config_path}")
-        print(f"  Game port: {game_port}")
-        print(f"  Beacon port: {beacon_port}")
-        
-        # Start Rathole client process
-        cmd = [RATHOLE_CLIENT_BINARY, config_path]
-        process = subprocess.Popen(
-            cmd,
+
+        cfg = generate_rathole_client_config(server_id, server_name,
+                                             game_port, beacon_port)
+        cfg_path = f"{rathole_dir}/client.toml"
+        with open(cfg_path, "w") as fh:
+            fh.write(cfg)
+
+        # 3️⃣ Spawn rathole – it now tunnels the *same* numbers it dials
+        proc = subprocess.Popen(
+            [RATHOLE_CLIENT_BINARY, cfg_path],
             cwd=rathole_dir,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -310,19 +292,23 @@ def start_rathole_client(server_id, server_name, game_port, beacon_port):
             bufsize=1,
             universal_newlines=True
         )
-        
-        # Store process info
+
         rathole_clients[server_id] = {
-            'process': process,
-            'config_path': config_path,
-            'rathole_dir': rathole_dir,
-            'game_port': game_port,
-            'beacon_port': beacon_port,
-            'started_at': datetime.now().isoformat()
+            "process": proc,
+            "config_path": cfg_path,
+            "rathole_dir": rathole_dir,
+            "game_port": game_port,
+            "beacon_port": beacon_port,
+            "started_at": datetime.now().isoformat()
         }
-        
-        print(f"Started Rathole client for {server_id} (PID: {process.pid})")
+
+        print(f"✓ Started Rathole client for {server_id} (PID {proc.pid})")
         return True
+
+    except Exception as exc:
+        print(f"Failed to start Rathole client for {server_id}: {exc}")
+        return False
+
         
     except Exception as e:
         print(f"Failed to start Rathole client for {server_id}: {str(e)}")

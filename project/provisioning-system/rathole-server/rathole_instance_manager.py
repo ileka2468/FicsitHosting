@@ -357,35 +357,34 @@ class RatholeInstanceManager:
                     return port
         return None
     
-    def _generate_server_config(self, server_id: str, original_game_port: int, rathole_port: int, tunnel_game_port: int, tunnel_query_port: Optional[int] = None) -> str:
-        """Generate Rathole server configuration for a specific game server.
+    def _generate_server_config(
+        self, server_id: str,
+        original_game_port: int,
+        rathole_port: int,
+        tunnel_game_port: int,
+        tunnel_query_port: Optional[int] = None
+    ) -> str:
+        cfg = f"""
+[server]
+bind_addr    = "{PUBLIC_IP}:{rathole_port}"
+default_token = "{API_TOKEN}"
 
-        The game TCP and UDP services use the same public port. This simplifies
-        client connectivity as some games (like Satisfactory) expect the same
-        port for both protocols.
-        """
-        # Base configuration for the server
-        config = f"""
-        [server]
-        bind_addr = "{PUBLIC_IP}:{rathole_port}"
-        default_token = "{API_TOKEN}"
+[server.services.{server_id}_game_tcp]
+type       = "tcp"
+bind_addr  = "{PUBLIC_IP}:{tunnel_game_port}"
 
-        [server.services.{server_id}_game_tcp]
-        type = "tcp"
-        bind_addr = "{PUBLIC_IP}:{tunnel_game_port}"
-
-        [server.services.{server_id}_game_udp]
-        type = "udp"
-        bind_addr = "{PUBLIC_IP}:{tunnel_game_port}"
+[server.services.{server_id}_game_udp]
+type       = "udp"
+bind_addr  = "{PUBLIC_IP}:{tunnel_game_port}"
 """
-        # Conditionally add the query API service if a query port is provided (TCP only)
         if tunnel_query_port:
-            config += f"""
-        [server.services.{server_id}_query]
-        type = "tcp"
-        bind_addr = "{PUBLIC_IP}:{tunnel_query_port}"
+            cfg += f"""
+[server.services.{server_id}_query]
+type       = "tcp"
+bind_addr  = "{PUBLIC_IP}:{tunnel_query_port}"
 """
-        return config
+        return cfg
+
     
     def create_instance(self, server_id: str, game_port: int, query_port: Optional[int] = None, owner_id: str = None, owner_username: str = None) -> Dict[str, Any]:
         """Create a new Rathole server instance for a game server"""
@@ -600,39 +599,35 @@ class RatholeInstanceManager:
         return {'status': 'success', 'removed': removed, 'remaining': list(self.instances.keys())}
     
     def get_client_config(self, server_id: str, host_ip: str) -> Optional[str]:
-        """Generate client configuration for a specific server"""
         if server_id not in self.instances:
             return None
-        
-        instance_info = self.instances[server_id]
-        rathole_port = instance_info['rathole_port']
-        original_game_port = instance_info['game_port']
-        original_query_port = instance_info['query_port']
-        
-        # Base client configuration
-        config = f"""
-        [client]
-        remote_addr = "{INTERNAL_SERVER_HOST}:{rathole_port}"
-        default_token = "{API_TOKEN}"
 
-        [client.services.{server_id}_game_tcp]
-        type = "tcp"
-        local_addr = "{host_ip}:{original_game_port}"
+        inst = self.instances[server_id]
+        rathole_port     = inst['rathole_port']
+        game_port        = inst['game_port']   # ← real port
+        query_port       = inst['query_port']  # ← real port
 
-        [client.services.{server_id}_game_udp]
-        type = "udp"
-        local_addr = "{host_ip}:{original_game_port}"
+        cfg = f"""
+[client]
+remote_addr  = "{INTERNAL_SERVER_HOST}:{rathole_port}"
+default_token = "{API_TOKEN}"
+
+[client.services.{server_id}_game_tcp]
+type       = "tcp"
+local_addr = "{host_ip}:{game_port}"
+
+[client.services.{server_id}_game_udp]
+type       = "udp"
+local_addr = "{host_ip}:{game_port}"
 """
-        
-        # Conditionally add the query API service if a query port exists
-        if original_query_port:
-            config += f"""
-            [client.services.{server_id}_query]
-            type = "tcp"
-            local_addr = "{host_ip}:{original_query_port}"
+        if query_port:
+            cfg += f"""
+[client.services.{server_id}_query]
+type       = "tcp"
+local_addr = "{host_ip}:{query_port}"
 """
-        
-        return config
+        return cfg
+
 
 # Initialize manager
 rathole_manager = RatholeInstanceManager()
