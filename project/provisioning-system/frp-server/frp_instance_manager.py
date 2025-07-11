@@ -195,8 +195,10 @@ class FrpManager:
 [common]
 server_addr = {FRP_SERVER_HOST}
 server_port = {FRP_SERVER_PORT}
-token       = {API_TOKEN}
-tls_enable  = {str(FRP_TLS_ENABLED).lower()}
+auth.method = "token"
+auth.token  = {API_TOKEN}
+auth.additionalScopes = ["HeartBeats", "NewWorkConns"]
+transport.tls.enable = {str(FRP_TLS_ENABLED).lower()}
 
 [{server_id}_game_tcp]
 type        = tcp
