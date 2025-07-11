@@ -9,6 +9,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock  # Docker-in-Docker access
       - ./data:/data  # Shared data directory for servers
       - ./rathole-configs:/rathole-configs  # frpc configs
+      - ./frp-logs:/var/log/frp  # frpc logs
     environment:
       - ORCHESTRATOR_HOST=${ORCHESTRATOR_HOST}
       - ORCHESTRATOR_PORT=${ORCHESTRATOR_PORT}

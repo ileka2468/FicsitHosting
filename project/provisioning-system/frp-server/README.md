@@ -36,6 +36,8 @@ Player/Admin → Orchestrator (RBAC) → Host Agent → FRP Manager (Token Valid
    ```bash
    docker-compose up -d
    ```
+   The container automatically starts `frps` using `./frps.ini` and the
+   Flask instance manager. Logs are written to `/var/log/frp/frps.log`.
 
 3. **Test the API**:
    ```bash
@@ -215,6 +217,9 @@ cp /etc/letsencrypt/live/your-domain.com/privkey.pem ./certs/server.key
 ```bash
 # View container logs
 docker-compose logs -f frp-instance-manager
+
+# frps server logs
+docker exec frp-instance-manager tail -f /var/log/frp/frps.log
 
 # Check instance-specific logs
 docker exec frp-instance-manager ls -la /data/frp-instances/

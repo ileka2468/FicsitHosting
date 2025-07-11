@@ -37,6 +37,8 @@ RATHOLE_INSTANCE_MANAGER_HOST = '69.164.196.13'  # Instance manager host
 RATHOLE_INSTANCE_MANAGER_PORT = os.environ.get('RATHOLE_INSTANCE_MANAGER_PORT', '7001')
 RATHOLE_TOKEN = os.environ.get('RATHOLE_TOKEN', 'your-api-control-token-here')
 RATHOLE_CLIENT_BINARY = os.environ.get('RATHOLE_CLIENT_BINARY', '/usr/local/bin/frpc')
+FRP_LOG_DIR = os.environ.get('FRP_LOG_DIR', '/var/log/frp')
+os.makedirs(FRP_LOG_DIR, exist_ok=True)
 
 # Authentication Configuration
 USE_HTTPS_RATHOLE = os.environ.get('USE_HTTPS_RATHOLE', 'false').lower() == 'true'
@@ -282,15 +284,15 @@ def start_rathole_client(server_id, server_name, game_port, beacon_port):
         with open(cfg_path, "w") as fh:
             fh.write(cfg)
 
-        # 3️⃣ Spawn rathole – it now tunnels the *same* numbers it dials
+        # 3️⃣ Spawn frpc and log output
+        log_path = f"{FRP_LOG_DIR}/{server_id}.log"
+        log_file = open(log_path, "a")
         proc = subprocess.Popen(
             [RATHOLE_CLIENT_BINARY, cfg_path],
             cwd=rathole_dir,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
             text=True,
-            bufsize=1,
-            universal_newlines=True
         )
 
         frp_clients[server_id] = {
@@ -299,7 +301,8 @@ def start_rathole_client(server_id, server_name, game_port, beacon_port):
             "rathole_dir": rathole_dir,
             "game_port": game_port,
             "beacon_port": beacon_port,
-            "started_at": datetime.now().isoformat()
+            "started_at": datetime.now().isoformat(),
+            "log_path": log_path
         }
 
         print(f"✓ Started FRP client for {server_id} (PID {proc.pid})")
@@ -307,11 +310,6 @@ def start_rathole_client(server_id, server_name, game_port, beacon_port):
 
     except Exception as exc:
         print(f"Failed to start FRP client for {server_id}: {exc}")
-        return False
-
-        
-    except Exception as e:
-        print(f"Failed to start FRP client for {server_id}: {str(e)}")
         return False
 
 def stop_rathole_client(server_id):
@@ -864,16 +862,16 @@ def start_rathole_client_with_config(server_id, config_path):
         
         rathole_dir = os.path.dirname(config_path)
         
-        # Start FRP client process
+        # Start FRP client process with logging
+        log_path = f"{FRP_LOG_DIR}/{server_id}.log"
+        log_file = open(log_path, "a")
         cmd = [RATHOLE_CLIENT_BINARY, config_path]
         process = subprocess.Popen(
             cmd,
             cwd=rathole_dir,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
             text=True,
-            bufsize=1,
-            universal_newlines=True
         )
         
         # Store process info
@@ -883,7 +881,8 @@ def start_rathole_client_with_config(server_id, config_path):
             'rathole_dir': rathole_dir,
             'game_port': None,  # Will be parsed from config if needed
             'beacon_port': None,  # Will be parsed from config if needed
-            'started_at': datetime.now().isoformat()
+            'started_at': datetime.now().isoformat(),
+            'log_path': log_path
         }
         
         print(f"Started FRP client for {server_id} with config {config_path} (PID: {process.pid})")

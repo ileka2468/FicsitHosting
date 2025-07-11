@@ -24,13 +24,17 @@ COPY requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
 # Create data directories
-RUN mkdir -p /data/frp-instances /var/log/frp
+RUN mkdir -p /data/frp-instances /var/log/frp /etc/frp
 
-# Expose port for instance manager API
-EXPOSE 7001
+# Copy FRP configuration and startup script
+COPY frps.ini /etc/frp/frps.ini
+COPY start-with-frps.sh /start-with-frps.sh
+RUN chmod +x /start-with-frps.sh
 
+# Expose ports for frps and instance manager
+EXPOSE 7000 7001 7500
 # Expose port range for tunneled game traffic
 EXPOSE 40000-40100
 
-# Run the instance manager
-CMD ["python", "frp_instance_manager.py"]
+# Run frps then the instance manager
+CMD ["/start-with-frps.sh"]

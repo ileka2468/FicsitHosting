@@ -30,8 +30,8 @@ WORKDIR /app
 COPY agent.py /app/agent.py
 COPY .env /app/.env
 
-# Create data directories for Satisfactory servers and Rathole configs
-RUN mkdir -p /data/satisfactory /data/rathole
+# Create data directories for Satisfactory servers and FRP logs
+RUN mkdir -p /data/satisfactory /data/frp /var/log/frp
 
 # Expose the agent API port
 EXPOSE 8082

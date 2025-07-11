@@ -13,8 +13,20 @@ from typing import Dict, Any, Optional
 from flask import Flask, request, jsonify, g
 import redis
 import requests
+import logging
 
 app = Flask(__name__)
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    handlers=[
+        logging.FileHandler('/var/log/frp/manager.log'),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
 
 # Basic configuration
 SERVER_PORT = int(os.getenv("SERVER_PORT", "7001"))
@@ -154,6 +166,7 @@ class FrpManager:
             self.instances[server_id] = inst
             self._save_instance(inst)
             Path(f"{BASE_DATA_DIR}/{server_id}").mkdir(parents=True, exist_ok=True)
+            logger.info("Created instance %s -> game %s", server_id, tunnel_game_port)
             return {"status": "success", **inst}
 
     def remove_instance(self, server_id: str) -> Dict[str, Any]:
@@ -169,12 +182,14 @@ class FrpManager:
                 for child in path.iterdir():
                     child.unlink()
                 path.rmdir()
+            logger.info("Removed instance %s", server_id)
             return {"status": "success"}
 
     def get_client_config(self, server_id: str, host_ip: str) -> Optional[str]:
         inst = self.instances.get(server_id)
         if not inst:
             return None
+        logger.info("Generated client config for %s", server_id)
         cfg = f"""
 [common]
 server_addr = {FRP_SERVER_HOST}
@@ -208,11 +223,13 @@ app.manager = manager
 
 @app.route('/health', methods=['GET'])
 def health():
+    logger.debug("Health check requested")
     return jsonify({"status": "healthy", "instances": len(manager.instances)})
 
 @app.route('/api/instances', methods=['POST'])
 @require_auth
 def api_create_instance():
+    logger.info("Create instance requested by %s", g.user.get('username'))
     data = request.get_json() or {}
     required = ['server_id', 'game_port']
     for f in required:
@@ -227,6 +244,7 @@ def api_create_instance():
 @app.route('/api/instances/<server_id>', methods=['DELETE'])
 @require_auth
 def api_delete_instance(server_id):
+    logger.info("Delete instance %s requested by %s", server_id, g.user.get('username'))
     res = manager.remove_instance(server_id)
     code = 200 if res['status'] == 'success' else 404
     return jsonify(res), code
@@ -234,6 +252,7 @@ def api_delete_instance(server_id):
 @app.route('/api/instances/<server_id>/client-config', methods=['GET'])
 @require_auth
 def api_client_config(server_id):
+    logger.info("Client config requested for %s", server_id)
     host_ip = request.args.get('host_ip', '127.0.0.1')
     cfg = manager.get_client_config(server_id, host_ip)
     if not cfg:
