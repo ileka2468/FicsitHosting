@@ -94,19 +94,17 @@ docker-compose -f docker-compose.individual-instances.yml up -d orchestrator
 
 ### Instance Manager Ports
 - **Port 7001**: Instance manager HTTP API
-- **Ports 10000-20000**: Individual Rathole server instances
+- **Ports 30000-35000**: Range for tunneled game traffic
 
 ### Per-Server Allocation
 Each game server gets:
-- **1 Rathole server port** (from 10000-20000 range)
-- **2 public game ports** (gamePort + beaconPort, from your game port range)
+- **2 public game ports** (gamePort + beaconPort)
 
 Example:
 ```
-Server srv_123: 
-  - Rathole instance on port 10001
+Server srv_123:
   - Game traffic on public ports 30000-30001
-  - Client connects to Rathole instance at your-vps:10001
+  - frpc exposes the same ports on frps
 ```
 
 ## API Endpoints

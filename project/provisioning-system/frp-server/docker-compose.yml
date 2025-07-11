@@ -10,8 +10,8 @@ services:
       - "7000:7000/udp"
       - "7500:7500"          # frps dashboard
       - "7001:7001"           # Instance Manager API (HTTP)
-      - "40000-40100:40000-40100/tcp"  # Port range for tunneled game traffic
-      - "40000-40100:40000-40100/udp"  # Port range for tunneled game traffic (UDP)
+      - "30000-35000:30000-35000/tcp"  # Port range for tunneled game traffic
+      - "30000-35000:30000-35000/udp"  # Port range for tunneled game traffic (UDP)
     environment:
       # === REQUIRED: Update these values ===
       - PUBLIC_HOST_IP=69.164.196.13  #  Actual host/LAN IP
@@ -33,10 +33,6 @@ services:
       - HTTPS_PORT=443
       - FRP_BINARY=/usr/local/bin/frps
       - BASE_DATA_DIR=/data/frp-instances
-      
-      # === Port Allocation Ranges ===
-      - GAME_PORT_START=40000
-      - GAME_PORT_END=40100
       
       # === Flask Settings ===
       - FLASK_ENV=production

@@ -34,7 +34,7 @@ RUN chmod +x /start-with-frps.sh
 # Expose ports for frps and instance manager
 EXPOSE 7000 7001 7500
 # Expose port range for tunneled game traffic
-EXPOSE 40000-40100
+EXPOSE 30000-35000
 
 # Run frps then the instance manager
 CMD ["/start-with-frps.sh"]

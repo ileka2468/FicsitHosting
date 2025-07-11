@@ -45,8 +45,6 @@ FRP_SERVER_HOST = os.getenv("FRP_SERVER_HOST", "frp-instance-manager")
 FRP_SERVER_PORT = int(os.getenv("FRP_SERVER_PORT", "7000"))
 FRP_TLS_ENABLED = os.getenv("FRP_TLS_ENABLED", "true").lower() == "true"
 
-GAME_PORT_START = int(os.getenv("GAME_PORT_START", "40000"))
-GAME_PORT_END = int(os.getenv("GAME_PORT_END", "40100"))
 
 REDIS_HOST = os.getenv("REDIS_HOST")
 REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
@@ -132,34 +130,27 @@ class FrpManager:
                 if self.redis:
                     self.redis.hdel("frp:port_allocations", p)
 
-    def _allocate_port(self) -> Optional[int]:
-        for port in range(GAME_PORT_START, GAME_PORT_END + 1):
-            if port not in self.port_allocations:
-                return port
-        return None
-
     def create_instance(self, server_id: str, game_port: int, query_port: Optional[int]=None,
                         owner_id: str=None, owner_username: str=None) -> Dict[str, Any]:
         with self.lock:
             if server_id in self.instances:
                 return {"status": "error", "message": f"Instance {server_id} already exists"}
-            tunnel_game_port = self._allocate_port()
-            if not tunnel_game_port:
-                return {"status": "error", "message": "No available tunnel ports"}
-            self.port_allocations[tunnel_game_port] = server_id
+            if game_port in self.port_allocations:
+                return {"status": "error", "message": f"Port {game_port} already allocated"}
+            self.port_allocations[game_port] = server_id
+
             tunnel_query_port = None
-            if query_port:
-                tunnel_query_port = self._allocate_port()
-                if not tunnel_query_port:
-                    del self.port_allocations[tunnel_game_port]
-                    return {"status": "error", "message": "No available query ports"}
-                self.port_allocations[tunnel_query_port] = server_id
+            if query_port is not None:
+                if query_port in self.port_allocations:
+                    del self.port_allocations[game_port]
+                    return {"status": "error", "message": f"Port {query_port} already allocated"}
+                self.port_allocations[query_port] = server_id
             inst = {
                 "server_id": server_id,
                 "game_port": game_port,
                 "query_port": query_port,
-                "tunnel_game_port": tunnel_game_port,
-                "tunnel_query_port": tunnel_query_port,
+                "tunnel_game_port": game_port,
+                "tunnel_query_port": query_port,
                 "owner_id": owner_id,
                 "owner_username": owner_username,
                 "created_at": datetime.utcnow().isoformat()
