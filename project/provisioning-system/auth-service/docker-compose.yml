@@ -10,7 +10,9 @@ services:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://auth-db:5432/auth_db
       - SPRING_DATASOURCE_USERNAME=auth_user
       - SPRING_DATASOURCE_PASSWORD=auth_password
-      - APP_JWT_SECRET=${JWT_SECRET}
+      - APP_JWT_SECRET=BtBy4Ubr0DC5+EoaJLj+JuG++0sqWiE1GH0FGRgdeixx4KKK1tb+XdCx9R56baQT2lKmnNHWeZclFFCu2q++IA==
+      - APP_JWT_EXPIRATION=3600000 # 1 hour
+      - APP_JWT_REFRESH_EXPIRATION=7200000 # 2 hours
       - APP_FRONTEND_URL=${FRONTEND_URL}
       - SPRING_MAIL_HOST=mailhog
       - SPRING_MAIL_PORT=1025
