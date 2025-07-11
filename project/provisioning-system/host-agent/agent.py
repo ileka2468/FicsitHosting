@@ -262,15 +262,31 @@ def generate_rathole_client_config(server_id, server_name, game_port, beacon_por
     host_part = server_id if USE_CONTAINER_HOSTNAMES else '0.0.0.0'
 
     config = f"""
-[client]
-remote_addr = "{RATHOLE_INSTANCE_MANAGER_HOST}:UNKNOWN_PORT"
-default_token = "{RATHOLE_TOKEN}"
+[common]
+server_addr = {RATHOLE_INSTANCE_MANAGER_HOST}
+server_port = {RATHOLE_INSTANCE_MANAGER_PORT}
+auth.method = "token"
+auth.token  = {RATHOLE_TOKEN}
+auth.additionalScopes = ["HeartBeats", "NewWorkConns"]
+transport.tls.enable = {str(USE_HTTPS_RATHOLE).lower()}
 
-[client.services.{server_id}_game]
-local_addr = "{host_part}:{game_port}"
+[{server_id}_game_tcp]
+type        = tcp
+local_ip    = {host_part}
+local_port  = {game_port}
+remote_port = 0
 
-[client.services.{server_id}_beacon]
-local_addr = "{host_part}:{beacon_port}"
+[{server_id}_game_udp]
+type        = udp
+local_ip    = {host_part}
+local_port  = {game_port}
+remote_port = 0
+
+[{server_id}_query]
+type        = tcp
+local_ip    = {host_part}
+local_port  = {beacon_port}
+remote_port = 0
 """
     return config
 
@@ -296,7 +312,7 @@ def start_rathole_client(server_id, server_name, game_port, beacon_port):
         log_path = f"{FRP_LOG_DIR}/{server_id}.log"
         log_file = open(log_path, "a")
         proc = subprocess.Popen(
-            [RATHOLE_CLIENT_BINARY, cfg_path],
+            [RATHOLE_CLIENT_BINARY, '-c', cfg_path],
             cwd=rathole_dir,
             stdout=log_file,
             stderr=subprocess.STDOUT,
@@ -873,7 +889,7 @@ def start_rathole_client_with_config(server_id, config_path):
         # Start FRP client process with logging
         log_path = f"{FRP_LOG_DIR}/{server_id}.log"
         log_file = open(log_path, "a")
-        cmd = [RATHOLE_CLIENT_BINARY, config_path]
+        cmd = [RATHOLE_CLIENT_BINARY, '-c', config_path]
         process = subprocess.Popen(
             cmd,
             cwd=rathole_dir,
