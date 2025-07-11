@@ -296,7 +296,7 @@ def start_rathole_client(server_id, server_name, game_port, beacon_port):
         log_path = f"{FRP_LOG_DIR}/{server_id}.log"
         log_file = open(log_path, "a")
         proc = subprocess.Popen(
-            [RATHOLE_CLIENT_BINARY, cfg_path],
+            [RATHOLE_CLIENT_BINARY, '-c', cfg_path],
             cwd=rathole_dir,
             stdout=log_file,
             stderr=subprocess.STDOUT,
@@ -873,7 +873,7 @@ def start_rathole_client_with_config(server_id, config_path):
         # Start FRP client process with logging
         log_path = f"{FRP_LOG_DIR}/{server_id}.log"
         log_file = open(log_path, "a")
-        cmd = [RATHOLE_CLIENT_BINARY, config_path]
+        cmd = [RATHOLE_CLIENT_BINARY, '-c', config_path]
         process = subprocess.Popen(
             cmd,
             cwd=rathole_dir,
