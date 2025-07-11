@@ -17,6 +17,8 @@ services:
       - PUBLIC_HOST_IP=69.164.196.13  #  Actual host/LAN IP
       - PUBLIC_IP=${PUBLIC_IP:-0.0.0.0}  # For server binding (optional, defaults to 0.0.0.0)
       - INTERNAL_SERVER_HOST=69.164.196.13
+      - FRP_SERVER_HOST=69.164.196.13
+      - API_TOKEN=ZulFyyu3FraFfIuDxQe73pJJPXxuyOOrk2tqQKL7HwM3XGDKTQp7oH4v6gcgP86Kir79uicVJIZtj79dy4Q1svSrSxT2UDWGcejb2am3p1j7Wl2Rj5jKhuErIdi2jYB
       # === Security Configuration ===
       - AUTH_SERVICE_URL=${AUTH_SERVICE_URL:-http://auth-service:8081}
       - USE_HTTPS=${USE_HTTPS:-false}
