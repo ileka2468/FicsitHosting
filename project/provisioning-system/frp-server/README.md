@@ -56,6 +56,7 @@ Player/Admin → Orchestrator (RBAC) → Host Agent → FRP Manager (Token Valid
    cp .env.example .env
    # Update .env:
    USE_HTTPS=true
+   FRP_TLS_ENABLED=true
    AUTH_SERVICE_URL=https://your-auth-service.com
    LEGACY_AUTH_ENABLED=false
    PUBLIC_IP=your.vps.ip.address
@@ -137,6 +138,7 @@ curl -H "Content-Type: application/json" \
 | `SSL_CERT_PATH` | `/certs/server.crt` | SSL certificate path |
 | `SSL_KEY_PATH` | `/certs/server.key` | SSL private key path |
 | `LEGACY_AUTH_ENABLED` | `true` | Enable legacy API token auth |
+| `FRP_TLS_ENABLED` | `true` | Enable TLS when generating client configs |
 | `API_TOKEN` | `your-token` | Legacy API token |
 
 ### Network Configuration

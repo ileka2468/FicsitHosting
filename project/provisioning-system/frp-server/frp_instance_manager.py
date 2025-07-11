@@ -43,6 +43,7 @@ LEGACY_AUTH_ENABLED = os.getenv("LEGACY_AUTH_ENABLED", "true").lower() == "true"
 BASE_DATA_DIR = os.getenv("BASE_DATA_DIR", "/data/frp-instances")
 FRP_SERVER_HOST = os.getenv("FRP_SERVER_HOST", "frp-instance-manager")
 FRP_SERVER_PORT = int(os.getenv("FRP_SERVER_PORT", "7000"))
+FRP_TLS_ENABLED = os.getenv("FRP_TLS_ENABLED", "true").lower() == "true"
 
 GAME_PORT_START = int(os.getenv("GAME_PORT_START", "40000"))
 GAME_PORT_END = int(os.getenv("GAME_PORT_END", "40100"))
@@ -195,6 +196,7 @@ class FrpManager:
 server_addr = {FRP_SERVER_HOST}
 server_port = {FRP_SERVER_PORT}
 token       = {API_TOKEN}
+tls_enable  = {str(FRP_TLS_ENABLED).lower()}
 
 [{server_id}_game_tcp]
 type        = tcp

@@ -160,6 +160,9 @@ python agent.py
 # On your public VPS
 cd frp-server
 docker-compose up -d
+# Start the reverse proxy for TLS
+cd ../reverse-proxy
+docker compose up -d
 ```
 
 ## 📊 API Documentation
@@ -275,16 +278,25 @@ spring.redis.password=your-redis-password
    ```
 
 4. **Reverse Proxy** (Nginx):
+   Use the `reverse-proxy` service to terminate TLS and route requests to the
+   internal containers. Example configuration:
    ```nginx
    server {
        listen 443 ssl;
-       server_name api.yourdomain.com;
-       
-       location / {
-           proxy_pass http://localhost:8080;
-           proxy_set_header Host $host;
-           proxy_set_header X-Real-IP $remote_addr;
+       ssl_certificate /etc/nginx/certs/server.crt;
+       ssl_certificate_key /etc/nginx/certs/server.key;
+
+       location /auth/ {
+           proxy_pass http://auth-service:8081/;
        }
+
+       location /manager/ {
+           proxy_pass http://frp-instance-manager:7001/;
+       }
+
+       # location /orchestrator/ {
+       #     proxy_pass http://satisfactory-orchestrator:8080/;
+       # }
    }
    ```
 

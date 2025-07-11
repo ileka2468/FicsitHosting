@@ -6,6 +6,8 @@ import com.satisfactoryhost.auth.model.AuthProvider;
 import com.satisfactoryhost.auth.model.Role;
 import com.satisfactoryhost.auth.model.User;
 import com.satisfactoryhost.auth.repository.UserRepository;
+import com.satisfactoryhost.auth.repository.InvalidTokenRepository;
+import com.satisfactoryhost.auth.model.InvalidToken;
 import com.satisfactoryhost.auth.security.JwtTokenProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -37,6 +39,8 @@ public class AuthService {
     @Autowired
     private JwtTokenProvider tokenProvider;
 
+    @Autowired
+    private InvalidTokenRepository invalidTokenRepository;
     @Autowired
     private EmailService emailService;
 
@@ -186,12 +190,21 @@ public class AuthService {
         );
     }
 
-    public void logout(String refreshToken) {
+    public void logout(String refreshToken, String accessToken) {
         userRepository.findByRefreshToken(refreshToken)
                 .ifPresent(user -> {
                     user.setRefreshToken(null);
                     userRepository.save(user);
                 });
+
+        if (accessToken != null && tokenProvider.validateToken(accessToken)) {
+            LocalDateTime exp = tokenProvider.getExpirationDateFromToken(accessToken)
+                    .toInstant()
+                    .atZone(java.time.ZoneId.systemDefault())
+                    .toLocalDateTime();
+            InvalidToken token = new InvalidToken(accessToken, exp);
+            invalidTokenRepository.save(token);
+        }
     }
 
     public boolean verifyEmail(String token) {
@@ -296,8 +309,8 @@ public class AuthService {
         }
         
         String token = authHeader.substring(7);
-        
-        if (!tokenProvider.validateToken(token)) {
+
+        if (!tokenProvider.validateToken(token) || invalidTokenRepository.existsByToken(token)) {
             throw new BadRequestException("Invalid or expired token");
         }
         
