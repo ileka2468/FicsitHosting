@@ -1,0 +1,23 @@
+
+[common]
+server_addr = frp-instance-manager
+server_port = 7000
+token       = your-api-control-token-here
+
+[srv_ileka2468_50cdcb8d_game_tcp]
+type        = tcp
+local_ip    = 172.22.0.4
+local_port  = 30006
+remote_port = 40000
+
+[srv_ileka2468_50cdcb8d_game_udp]
+type        = udp
+local_ip    = 172.22.0.4
+local_port  = 30006
+remote_port = 40000
+
+[srv_ileka2468_50cdcb8d_query]
+type        = tcp
+local_ip    = 172.22.0.4
+local_port  = 30007
+remote_port = 40001

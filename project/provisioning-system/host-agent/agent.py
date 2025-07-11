@@ -186,9 +186,10 @@ def create_tunnel_instance(server_id, game_port, beacon_port):
         # For legacy auth, include token in payload
         if not ACCESS_TOKEN and LEGACY_AUTH_ENABLED:
             payload['token'] = RATHOLE_TOKEN
-        
+        url = f'{base_url}/api/instances'
+        print(f"Creating tunnel instance for {server_id} at {url} with payload: {json.dumps(payload)}")
         response = requests.post(
-            f'{base_url}/api/instances',
+            url,
             json=payload,
             headers=headers,
             timeout=10,

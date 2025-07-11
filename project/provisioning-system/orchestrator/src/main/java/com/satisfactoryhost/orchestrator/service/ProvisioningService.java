@@ -14,6 +14,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
+import org.springframework.http.client.reactive.ReactorClientHttpConnector;
+import io.netty.handler.ssl.SslContext;
+import io.netty.handler.ssl.SslContextBuilder;
+import io.netty.handler.ssl.util.InsecureTrustManagerFactory;
+import reactor.netty.http.client.HttpClient;
 import java.time.ZonedDateTime;
 import java.time.ZoneOffset;
 import java.util.Optional;
@@ -25,6 +30,9 @@ import java.util.ArrayList;
 
 @Service
 public class ProvisioningService {
+    
+    // SSL Configuration - Set to true to disable SSL certificate validation for self-signed certificates
+    private static final boolean DISABLE_SSL_VALIDATION = true;
     
     @Autowired
     private NodeSchedulerService nodeSchedulerService;
@@ -59,9 +67,29 @@ public class ProvisioningService {
         }
         
         try {
-            return webClientBuilder.build()
+            WebClient webClient;
+            
+            if (DISABLE_SSL_VALIDATION) {
+                // Create SSL context that trusts all certificates (for self-signed certs)
+                SslContext sslContext = SslContextBuilder
+                    .forClient()
+                    .trustManager(InsecureTrustManagerFactory.INSTANCE)
+                    .build();
+                
+                HttpClient httpClient = HttpClient.create()
+                    .secure(t -> t.sslContext(sslContext));
+                
+                webClient = webClientBuilder
+                    .clientConnector(new ReactorClientHttpConnector(httpClient))
+                    .build();
+            } else {
+                // Use standard WebClient with normal SSL validation
+                webClient = webClientBuilder.build();
+            }
+            
+            return webClient
                 .get()
-                .uri(authServiceUrl + "/api/auth/validate")
+                .uri(authServiceUrl + "/auth/api/auth/validate")
                 .header("Authorization", jwt)
                 .retrieve()
                 .bodyToMono(UserInfo.class)

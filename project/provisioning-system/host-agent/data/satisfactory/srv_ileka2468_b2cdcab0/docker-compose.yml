@@ -1,0 +1,34 @@
+networks:
+  satis_network:
+    external: true
+services:
+  srv_ileka2468_b2cdcab0:
+    container_name: srv_ileka2468_b2cdcab0
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 8G
+        reservations:
+          memory: 4G
+    environment:
+      AUTOSAVENUM: '5'
+      MAXPLAYERS: '10'
+      PGID: '1000'
+      PUID: '1000'
+      SERVERGAMEPORT: '30004'
+      SERVERMESSAGINGPORT: '30005'
+      SKIPUPDATE: 'false'
+      STEAMBETA: 'false'
+      TIMEOUT: '30'
+    hostname: srv_ileka2468_b2cdcab0
+    image: wolveix/satisfactory-server:latest
+    networks:
+    - satis_network
+    ports:
+    - 30004:30004/udp
+    - 30004:30004/tcp
+    - 30005:30005/tcp
+    restart: unless-stopped
+    volumes:
+    - ./data/srv_ileka2468_b2cdcab0:/config

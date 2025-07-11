@@ -2,8 +2,8 @@ networks:
   satis_network:
     external: true
 services:
-  srv_Tester_7380832d:
-    container_name: srv_Tester_7380832d
+  srv_ileka2468_8e122baf:
+    container_name: srv_ileka2468_8e122baf
     deploy:
       resources:
         limits:
@@ -13,7 +13,7 @@ services:
           memory: 4G
     environment:
       AUTOSAVENUM: '5'
-      MAXPLAYERS: '20'
+      MAXPLAYERS: '10'
       PGID: '1000'
       PUID: '1000'
       SERVERGAMEPORT: '30000'
@@ -21,7 +21,7 @@ services:
       SKIPUPDATE: 'false'
       STEAMBETA: 'false'
       TIMEOUT: '30'
-    hostname: srv_Tester_7380832d
+    hostname: srv_ileka2468_8e122baf
     image: wolveix/satisfactory-server:latest
     networks:
     - satis_network
@@ -31,4 +31,4 @@ services:
     - 30001:30001/tcp
     restart: unless-stopped
     volumes:
-    - ./data/srv_Tester_7380832d:/config
+    - ./data/srv_ileka2468_8e122baf:/config
