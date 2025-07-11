@@ -13,13 +13,13 @@ RUN curl -SL https://github.com/docker/compose/releases/download/v${COMPOSE_VERS
     -o /usr/local/bin/docker-compose \
  && chmod +x /usr/local/bin/docker-compose
 
-# Install Rathole client binary
-ENV RATHOLE_VERSION=0.5.0
-RUN wget https://github.com/rapiz1/rathole/releases/download/v${RATHOLE_VERSION}/rathole-x86_64-unknown-linux-gnu.zip \
- && unzip rathole-x86_64-unknown-linux-gnu.zip \
- && mv rathole /usr/local/bin/rathole \
- && chmod +x /usr/local/bin/rathole \
- && rm rathole-x86_64-unknown-linux-gnu.zip
+# Install FRP client binary
+ENV FRP_VERSION=0.57.0
+RUN wget https://github.com/fatedier/frp/releases/download/v${FRP_VERSION}/frp_${FRP_VERSION}_linux_amd64.tar.gz \
+ && tar -xzf frp_${FRP_VERSION}_linux_amd64.tar.gz \
+ && mv frp_${FRP_VERSION}_linux_amd64/frpc /usr/local/bin/frpc \
+ && chmod +x /usr/local/bin/frpc \
+ && rm -rf frp_${FRP_VERSION}_linux_amd64*
 
 # Install Python dependencies
 COPY requirements.txt /app/requirements.txt
@@ -30,8 +30,8 @@ WORKDIR /app
 COPY agent.py /app/agent.py
 COPY .env /app/.env
 
-# Create data directories for Satisfactory servers and Rathole configs
-RUN mkdir -p /data/satisfactory /data/rathole
+# Create data directories for Satisfactory servers and FRP logs
+RUN mkdir -p /data/satisfactory /data/frp /var/log/frp
 
 # Expose the agent API port
 EXPOSE 8082

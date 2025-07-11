@@ -50,8 +50,13 @@ public class AuthController {
     }
 
     @PostMapping("/logout")
-    public ResponseEntity<Map<String, String>> logoutUser(@Valid @RequestBody RefreshTokenRequest refreshTokenRequest) {
-        authService.logout(refreshTokenRequest.getRefreshToken());
+    public ResponseEntity<Map<String, String>> logoutUser(@RequestHeader(value = "Authorization", required = false) String authHeader,
+                                                          @Valid @RequestBody RefreshTokenRequest refreshTokenRequest) {
+        String accessToken = null;
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            accessToken = authHeader.substring(7);
+        }
+        authService.logout(refreshTokenRequest.getRefreshToken(), accessToken);
         
         Map<String, String> response = new HashMap<>();
         response.put("message", "User logged out successfully");

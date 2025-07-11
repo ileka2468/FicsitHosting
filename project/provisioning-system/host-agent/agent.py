@@ -32,11 +32,13 @@ ORCHESTRATOR_URL = f"http://{ORCHESTRATOR_HOST}:{ORCHESTRATOR_PORT}"
 # toggles which value is sent during registration.
 USE_HOSTNAME_REGISTRATION = os.environ.get('USE_HOSTNAME_REGISTRATION', 'false').lower() == 'true'
 
-# Rathole Configuration
-RATHOLE_INSTANCE_MANAGER_HOST = '69.164.196.13' # Replace with your rathole instance manager host
+# FRP Configuration (reuses previous env vars for compatibility)
+RATHOLE_INSTANCE_MANAGER_HOST = '69.164.196.13'  # Instance manager host
 RATHOLE_INSTANCE_MANAGER_PORT = os.environ.get('RATHOLE_INSTANCE_MANAGER_PORT', '7001')
 RATHOLE_TOKEN = os.environ.get('RATHOLE_TOKEN', 'your-api-control-token-here')
-RATHOLE_CLIENT_BINARY = os.environ.get('RATHOLE_CLIENT_BINARY', '/usr/local/bin/rathole')
+RATHOLE_CLIENT_BINARY = os.environ.get('RATHOLE_CLIENT_BINARY', '/usr/local/bin/frpc')
+FRP_LOG_DIR = os.environ.get('FRP_LOG_DIR', '/var/log/frp')
+os.makedirs(FRP_LOG_DIR, exist_ok=True)
 
 # Authentication Configuration
 USE_HTTPS_RATHOLE = os.environ.get('USE_HTTPS_RATHOLE', 'false').lower() == 'true'
@@ -60,8 +62,8 @@ print(f"  Use Container Hostnames: {USE_CONTAINER_HOSTNAMES}")
 # Container tracking
 running_containers = {}
 
-# Rathole client tracking
-rathole_clients = {}  # server_id -> process info
+# FRP client tracking
+frp_clients = {}  # server_id -> process info
 
 def generate_satisfactory_config(server_name, max_players, game_port, beacon_port, server_password=None):
     """Generate Satisfactory server configuration with provided ports"""
@@ -137,7 +139,7 @@ def generate_docker_compose_config(
 
 
 def get_auth_headers():
-    """Get authentication headers for rathole manager API calls"""
+    """Get authentication headers for tunnel manager API calls"""
     headers = {'Content-Type': 'application/json'}
     
     # Check if we have an access token from the request (priority)
@@ -156,13 +158,13 @@ def get_auth_headers():
     return headers
 
 def get_rathole_base_url():
-    """Get the base URL for rathole instance manager"""
+    """Get the base URL for the FRP instance manager"""
     protocol = 'https' if USE_HTTPS_RATHOLE else 'http'
     port = '443' if USE_HTTPS_RATHOLE else RATHOLE_INSTANCE_MANAGER_PORT
     return f"{protocol}://{RATHOLE_INSTANCE_MANAGER_HOST}:{port}"
 
 def create_tunnel_instance(server_id, game_port, beacon_port):
-    """Create a tunnel instance on the rathole instance manager"""
+    """Create a tunnel instance on the FRP instance manager"""
     try:
         base_url = get_rathole_base_url()
         headers = get_auth_headers()
@@ -200,7 +202,7 @@ def create_tunnel_instance(server_id, game_port, beacon_port):
         return False
 
 def get_rathole_client_config_from_manager(server_id):
-    """Get Rathole client configuration from the instance manager"""
+    """Get FRP client configuration from the instance manager"""
     try:
         base_url = get_rathole_base_url()
         headers = get_auth_headers()
@@ -240,7 +242,7 @@ def get_rathole_client_config_from_manager(server_id):
         return None
 
 def generate_rathole_client_config(server_id, server_name, game_port, beacon_port):
-    """Generate Rathole client configuration for a specific server (fallback method)"""
+    """Generate FRP client configuration for a specific server (fallback method)"""
     # Try to get config from instance manager first
     config = get_rathole_client_config_from_manager(server_id)
     if config:
@@ -265,7 +267,7 @@ local_addr = "{host_part}:{beacon_port}"
     return config
 
 def start_rathole_client(server_id, server_name, game_port, beacon_port):
-    """Launch a Rathole client whose tunnel ports match the container’s bind ports."""
+    """Launch an FRP client whose tunnel ports match the container’s bind ports."""
     try:
         # 1️⃣ Create (or refresh) the tunnel instance
         if not create_tunnel_instance(server_id, game_port, beacon_port):
@@ -273,7 +275,7 @@ def start_rathole_client(server_id, server_name, game_port, beacon_port):
             return False
 
         # 2️⃣ Prepare the client.cfg on disk
-        rathole_dir = f"/data/rathole/{server_id}"
+        rathole_dir = f"/data/frp/{server_id}"
         os.makedirs(rathole_dir, exist_ok=True)
 
         cfg = generate_rathole_client_config(server_id, server_name,
@@ -282,46 +284,42 @@ def start_rathole_client(server_id, server_name, game_port, beacon_port):
         with open(cfg_path, "w") as fh:
             fh.write(cfg)
 
-        # 3️⃣ Spawn rathole – it now tunnels the *same* numbers it dials
+        # 3️⃣ Spawn frpc and log output
+        log_path = f"{FRP_LOG_DIR}/{server_id}.log"
+        log_file = open(log_path, "a")
         proc = subprocess.Popen(
             [RATHOLE_CLIENT_BINARY, cfg_path],
             cwd=rathole_dir,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
             text=True,
-            bufsize=1,
-            universal_newlines=True
         )
 
-        rathole_clients[server_id] = {
+        frp_clients[server_id] = {
             "process": proc,
             "config_path": cfg_path,
             "rathole_dir": rathole_dir,
             "game_port": game_port,
             "beacon_port": beacon_port,
-            "started_at": datetime.now().isoformat()
+            "started_at": datetime.now().isoformat(),
+            "log_path": log_path
         }
 
-        print(f"✓ Started Rathole client for {server_id} (PID {proc.pid})")
+        print(f"✓ Started FRP client for {server_id} (PID {proc.pid})")
         return True
 
     except Exception as exc:
-        print(f"Failed to start Rathole client for {server_id}: {exc}")
-        return False
-
-        
-    except Exception as e:
-        print(f"Failed to start Rathole client for {server_id}: {str(e)}")
+        print(f"Failed to start FRP client for {server_id}: {exc}")
         return False
 
 def stop_rathole_client(server_id):
-    """Stop the Rathole client process for a specific server"""
+    """Stop the FRP client process for a specific server"""
     try:
-        if server_id not in rathole_clients:
-            print(f"No Rathole client found for {server_id}")
+        if server_id not in frp_clients:
+            print(f"No FRP client found for {server_id}")
             return True
         
-        client_info = rathole_clients[server_id]
+        client_info = frp_clients[server_id]
         process = client_info['process']
         
         # Terminate the process
@@ -331,39 +329,39 @@ def stop_rathole_client(server_id):
             # Wait for process to terminate
             try:
                 process.wait(timeout=10)
-                print(f"Rathole client for {server_id} terminated gracefully")
+                print(f"FRP client for {server_id} terminated gracefully")
             except subprocess.TimeoutExpired:
-                print(f"Force killing Rathole client for {server_id}")
+                print(f"Force killing FRP client for {server_id}")
                 process.kill()
                 process.wait()
         
         # Clean up tracking
-        del rathole_clients[server_id]
+        del frp_clients[server_id]
         
         # Optionally clean up config files
         config_path = client_info.get('config_path')
         if config_path and os.path.exists(config_path):
             os.remove(config_path)
-            print(f"Removed Rathole config: {config_path}")
+            print(f"Removed FRP config: {config_path}")
         
-        # Remove tunnel instance from the rathole instance manager
+        # Remove tunnel instance from the FRP instance manager
         remove_tunnel_instance(server_id)
         
         return True
         
     except Exception as e:
-        print(f"Failed to stop Rathole client for {server_id}: {str(e)}")
+        print(f"Failed to stop FRP client for {server_id}: {str(e)}")
         return False
 
-def stop_all_rathole_clients():
-    """Stop all running Rathole clients"""
+def stop_all_frp_clients():
+    """Stop all running FRP clients"""
     results = {}
-    for sid in list(rathole_clients.keys()):
+    for sid in list(frp_clients.keys()):
         results[sid] = stop_rathole_client(sid)
     return results
 
 def remove_tunnel_instance(server_id):
-    """Remove tunnel instance from the rathole instance manager"""
+    """Remove tunnel instance from the FRP instance manager"""
     try:
         base_url = get_rathole_base_url()
         headers = get_auth_headers()
@@ -420,10 +418,10 @@ def spawn_container():
         print(f"  DEBUG: Authorization header from orchestrator: {auth_header[:50] if auth_header else 'None'}...")
         print(f"  DEBUG: Extracted token from g: {g.access_token[:20] if hasattr(g, 'access_token') and g.access_token else 'None'}...")
         
-        # Test auth headers that will be sent to Rathole manager
+        # Test auth headers that will be sent to the tunnel manager
         test_headers = get_auth_headers()
         auth_for_rathole = test_headers.get('Authorization', 'None')
-        print(f"  DEBUG: Auth header for Rathole: {auth_for_rathole[:50] if auth_for_rathole != 'None' else 'None'}...")
+        print(f"  DEBUG: Auth header for FRP: {auth_for_rathole[:50] if auth_for_rathole != 'None' else 'None'}...")
         
         # Create server directory structure
         server_dir = f'/data/satisfactory/{server_id}'
@@ -476,11 +474,11 @@ def spawn_container():
         
         print(f"Successfully spawned container {server_id} with ID: {container_id}")
         
-        # Start the Rathole client process to establish tunnel
+        # Start the FRP client process to establish tunnel
         if start_rathole_client(server_id, server_name, game_port, beacon_port):
-            print(f"Rathole client started successfully for {server_id}")
+            print(f"FRP client started successfully for {server_id}")
         else:
-            print(f"Warning: Failed to start Rathole client for {server_id}")
+            print(f"Warning: Failed to start FRP client for {server_id}")
             # Container is still running, but tunnel may not be available
         
         return jsonify({
@@ -553,7 +551,7 @@ def stop_container():
         if server_id in running_containers:
             del running_containers[server_id]
         
-        # Stop the Rathole client process
+        # Stop the FRP client process
         stop_rathole_client(server_id)
         
         # Clean up data based on type
@@ -724,11 +722,11 @@ def update_container_config(server_id):
         }), 500
 
 @app.route('/api/rathole/clients', methods=['GET'])
-def list_rathole_clients():
-    """List all active Rathole clients"""
+def list_frp_clients():
+    """List all active FRP clients"""
     try:
         clients_info = {}
-        for server_id, client_info in rathole_clients.items():
+        for server_id, client_info in frp_clients.items():
             process = client_info.get('process')
             is_running = process and process.poll() is None
             
@@ -754,7 +752,7 @@ def list_rathole_clients():
 
 @app.route('/api/rathole/clients/<server_id>/start', methods=['POST'])
 def start_rathole_client_endpoint(server_id):
-    """Start Rathole client for a specific server"""
+    """Start FRP client for a specific server"""
     try:
         data = request.json or {}
         server_name = data.get('serverName', f'server-{server_id}')
@@ -770,12 +768,12 @@ def start_rathole_client_endpoint(server_id):
         if start_rathole_client(server_id, server_name, game_port, beacon_port):
             return jsonify({
                 'status': 'success',
-                'message': f'Rathole client started for {server_id}'
+                'message': f'FRP client started for {server_id}'
             })
         else:
             return jsonify({
                 'status': 'error',
-                'message': f'Failed to start Rathole client for {server_id}'
+                'message': f'Failed to start FRP client for {server_id}'
             }), 500
             
     except Exception as e:
@@ -786,17 +784,17 @@ def start_rathole_client_endpoint(server_id):
 
 @app.route('/api/rathole/clients/<server_id>/stop', methods=['POST'])
 def stop_rathole_client_endpoint(server_id):
-    """Stop Rathole client for a specific server"""
+    """Stop FRP client for a specific server"""
     try:
         if stop_rathole_client(server_id):
             return jsonify({
                 'status': 'success',
-                'message': f'Rathole client stopped for {server_id}'
+                'message': f'FRP client stopped for {server_id}'
             })
         else:
             return jsonify({
                 'status': 'error',
-                'message': f'Failed to stop Rathole client for {server_id}'
+                'message': f'Failed to stop FRP client for {server_id}'
             }), 500
             
     except Exception as e:
@@ -807,7 +805,7 @@ def stop_rathole_client_endpoint(server_id):
 
 @app.route('/api/rathole/clients/<server_id>/configure', methods=['POST'])
 def configure_rathole_client_endpoint(server_id):
-    """Configure Rathole client with provided configuration"""
+    """Configure FRP client with provided configuration"""
     try:
         data = request.json or {}
         client_config = data.get('clientConfig')
@@ -819,7 +817,7 @@ def configure_rathole_client_endpoint(server_id):
             }), 400
         
         # Create rathole client config directory
-        rathole_dir = f'/data/rathole/{server_id}'
+        rathole_dir = f'/data/frp/{server_id}'
         os.makedirs(rathole_dir, exist_ok=True)
         
         # Write the provided config
@@ -827,18 +825,18 @@ def configure_rathole_client_endpoint(server_id):
         with open(config_path, 'w') as f:
             f.write(client_config)
         
-        print(f"Rathole client config written for {server_id}: {config_path}")
+        print(f"FRP client config written for {server_id}: {config_path}")
         
-        # Start the Rathole client with the new config
+        # Start the FRP client with the new config
         if start_rathole_client_with_config(server_id, config_path):
             return jsonify({
                 'status': 'success',
-                'message': f'Rathole client configured and started for {server_id}'
+                'message': f'FRP client configured and started for {server_id}'
             })
         else:
             return jsonify({
                 'status': 'error',
-                'message': f'Failed to start Rathole client for {server_id}'
+                'message': f'Failed to start FRP client for {server_id}'
             }), 500
             
     except Exception as e:
@@ -849,48 +847,49 @@ def configure_rathole_client_endpoint(server_id):
 
 @app.route('/api/rathole/clients/shutdown-all', methods=['POST'])
 def shutdown_all_clients_endpoint():
-    """Stop all Rathole clients on this agent"""
+    """Stop all FRP clients on this agent"""
     try:
-        result = stop_all_rathole_clients()
+        result = stop_all_frp_clients()
         return jsonify({'status': 'success', 'stopped': result})
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 def start_rathole_client_with_config(server_id, config_path):
-    """Start Rathole client with a specific config file"""
+    """Start FRP client with a specific config file"""
     try:
         # Stop existing client if running
         stop_rathole_client(server_id)
         
         rathole_dir = os.path.dirname(config_path)
         
-        # Start Rathole client process
+        # Start FRP client process with logging
+        log_path = f"{FRP_LOG_DIR}/{server_id}.log"
+        log_file = open(log_path, "a")
         cmd = [RATHOLE_CLIENT_BINARY, config_path]
         process = subprocess.Popen(
             cmd,
             cwd=rathole_dir,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
             text=True,
-            bufsize=1,
-            universal_newlines=True
         )
         
         # Store process info
-        rathole_clients[server_id] = {
+        frp_clients[server_id] = {
             'process': process,
             'config_path': config_path,
             'rathole_dir': rathole_dir,
             'game_port': None,  # Will be parsed from config if needed
             'beacon_port': None,  # Will be parsed from config if needed
-            'started_at': datetime.now().isoformat()
+            'started_at': datetime.now().isoformat(),
+            'log_path': log_path
         }
         
-        print(f"Started Rathole client for {server_id} with config {config_path} (PID: {process.pid})")
+        print(f"Started FRP client for {server_id} with config {config_path} (PID: {process.pid})")
         return True
         
     except Exception as e:
-        print(f"Failed to start Rathole client for {server_id}: {str(e)}")
+        print(f"Failed to start FRP client for {server_id}: {str(e)}")
         return False
 
 def get_node_stats_data():
@@ -1151,7 +1150,7 @@ def restart_threads():
 
 @app.before_request
 def extract_access_token():
-    """Extract access token from Authorization header for forwarding to Rathole manager"""
+    """Extract access token from Authorization header for forwarding to the tunnel manager"""
     auth_header = request.headers.get('Authorization')
     print(auth_header)  # Debug: print the full header for visibility
     print(f"DEBUG: before_request - Auth header: {auth_header[:50] if auth_header else 'None'}...")
@@ -1197,7 +1196,7 @@ def cleanup_server_data(server_id, cleanup_type='stop'):
         print(f"Cleaning up server data for {server_id} (type: {cleanup_type})")
         
         # Always clean up rathole configs
-        rathole_dir = f'/data/rathole/{server_id}'
+        rathole_dir = f'/data/frp/{server_id}'
         if os.path.exists(rathole_dir):
             import shutil
             shutil.rmtree(rathole_dir)
@@ -1294,7 +1293,7 @@ def get_server_data_info(server_id):
         info = {
             'server_id': server_id,
             'server_dir': f'/data/satisfactory/{server_id}',
-            'rathole_dir': f'/data/rathole/{server_id}',
+            'rathole_dir': f'/data/frp/{server_id}',
             'docker_volumes': [],
             'data_size': 0
         }

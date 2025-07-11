@@ -1,6 +1,8 @@
-# Secure Rathole Instance Manager
+# FRP Instance Manager
 
-A production-ready Rathole tunnel management service with authentication, authorization, and user-scoped access control.
+A lightweight service that allocates external ports and generates **FRP** client
+configurations. It exposes the same API that the previous Rathole manager did so
+existing orchestrator and host agents continue to work.
 
 ## Features
 
@@ -15,7 +17,7 @@ A production-ready Rathole tunnel management service with authentication, author
 ## Architecture
 
 ```
-Player/Admin → Orchestrator (RBAC) → Host Agent → Rathole Manager (Token Validation)
+Player/Admin → Orchestrator (RBAC) → Host Agent → FRP Manager (Token Validation)
                      ↓
               Auth Service validates access token
 ```
@@ -34,6 +36,8 @@ Player/Admin → Orchestrator (RBAC) → Host Agent → Rathole Manager (Token V
    ```bash
    docker-compose up -d
    ```
+   The container automatically starts `frps` using `./frps.ini` and the
+   Flask instance manager. Logs are written to `/var/log/frp/frps.log`.
 
 3. **Test the API**:
    ```bash
@@ -52,6 +56,7 @@ Player/Admin → Orchestrator (RBAC) → Host Agent → Rathole Manager (Token V
    cp .env.example .env
    # Update .env:
    USE_HTTPS=true
+   FRP_TLS_ENABLED=true
    AUTH_SERVICE_URL=https://your-auth-service.com
    LEGACY_AUTH_ENABLED=false
    PUBLIC_IP=your.vps.ip.address
@@ -133,6 +138,7 @@ curl -H "Content-Type: application/json" \
 | `SSL_CERT_PATH` | `/certs/server.crt` | SSL certificate path |
 | `SSL_KEY_PATH` | `/certs/server.key` | SSL private key path |
 | `LEGACY_AUTH_ENABLED` | `true` | Enable legacy API token auth |
+| `FRP_TLS_ENABLED` | `true` | Enable TLS when generating client configs |
 | `API_TOKEN` | `your-token` | Legacy API token |
 
 ### Network Configuration
@@ -143,14 +149,12 @@ curl -H "Content-Type: application/json" \
 | `SERVER_PORT` | `7001` | HTTP server port |
 | `HTTPS_PORT` | `443` | HTTPS server port |
 
-### Rathole Configuration
+### FRP Configuration
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `RATHOLE_BINARY` | `/usr/local/bin/rathole` | Rathole binary path |
-| `BASE_DATA_DIR` | `/data/rathole-instances` | Instance data directory |
-| `RATHOLE_PORT_START` | `10000` | Port range start |
-| `RATHOLE_PORT_END` | `20000` | Port range end |
+| `FRP_BINARY` | `/usr/local/bin/frps` | frps binary path |
+| `BASE_DATA_DIR` | `/data/frp-instances` | Instance data directory |
 
 ### Redis (Optional)
 
@@ -214,10 +218,13 @@ cp /etc/letsencrypt/live/your-domain.com/privkey.pem ./certs/server.key
 
 ```bash
 # View container logs
-docker-compose logs -f rathole-instance-manager
+docker-compose logs -f frp-instance-manager
+
+# frps server logs
+docker exec frp-instance-manager tail -f /var/log/frp/frps.log
 
 # Check instance-specific logs
-docker exec rathole-instance-manager ls -la /data/rathole-instances/
+docker exec frp-instance-manager ls -la /data/frp-instances/
 ```
 
 ## Development

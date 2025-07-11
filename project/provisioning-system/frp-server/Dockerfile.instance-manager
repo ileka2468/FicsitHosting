@@ -1,0 +1,40 @@
+FROM python:3.11-slim
+
+# Install system dependencies
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      wget unzip curl procps \
+ && rm -rf /var/lib/apt/lists/*
+
+# Install FRP server binary
+ENV FRP_VERSION=0.57.0
+RUN wget https://github.com/fatedier/frp/releases/download/v${FRP_VERSION}/frp_${FRP_VERSION}_linux_amd64.tar.gz \
+ && tar -xzf frp_${FRP_VERSION}_linux_amd64.tar.gz \
+ && mv frp_${FRP_VERSION}_linux_amd64/frps /usr/local/bin/frps \
+ && chmod +x /usr/local/bin/frps \
+ && rm -rf frp_${FRP_VERSION}_linux_amd64* 
+
+
+# Copy instance manager code
+WORKDIR /app
+COPY frp_instance_manager.py /app/frp_instance_manager.py
+
+# Install Python dependencies
+COPY requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir -r /app/requirements.txt
+
+# Create data directories
+RUN mkdir -p /data/frp-instances /var/log/frp /etc/frp
+
+# Copy FRP configuration and startup script
+COPY frps.ini /etc/frp/frps.ini
+COPY start-with-frps.sh /start-with-frps.sh
+RUN chmod +x /start-with-frps.sh
+
+# Expose ports for frps and instance manager
+EXPOSE 7000 7001 7500
+# Expose port range for tunneled game traffic
+EXPOSE 40000-40100
+
+# Run frps then the instance manager
+CMD ["/start-with-frps.sh"]

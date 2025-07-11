@@ -1,15 +1,17 @@
 services:
-  rathole-instance-manager:
+  frp-instance-manager:
     build:
       context: .
       dockerfile: Dockerfile.instance-manager
-    container_name: rathole-instance-manager
+    container_name: frp-instance-manager
     restart: unless-stopped
     ports:
+      - "7000:7000/tcp"       # frps control port
+      - "7000:7000/udp"
+      - "7500:7500"          # frps dashboard
       - "7001:7001"           # Instance Manager API (HTTP)
       - "443:443"             # Instance Manager API (HTTPS)
-      - "20000-20100:20000-20100/tcp"  # Port range for individual Rathole server instances
-      - "40000-40100:40000-40100/tcp"  # Port range for tunneled game traffic (completely different from real game ports)
+      - "40000-40100:40000-40100/tcp"  # Port range for tunneled game traffic
       - "40000-40100:40000-40100/udp"  # Port range for tunneled game traffic (UDP)
     environment:
       # === REQUIRED: Update these values ===
@@ -28,23 +30,21 @@ services:
       # === Instance Manager Configuration ===
       - SERVER_PORT=7001
       - HTTPS_PORT=443
-      - RATHOLE_BINARY=/usr/local/bin/rathole
-      - BASE_DATA_DIR=/data/rathole-instances
+      - FRP_BINARY=/usr/local/bin/frps
+      - BASE_DATA_DIR=/data/frp-instances
       
       # === Port Allocation Ranges ===
-      - RATHOLE_PORT_START=20000
-      - RATHOLE_PORT_END=20100
       - GAME_PORT_START=40000
       - GAME_PORT_END=40100
       
       # === Flask Settings ===
       - FLASK_ENV=production
     volumes:
-      - rathole_instances_data:/data/rathole-instances
-      - rathole_logs:/var/log/rathole
+      - frp_instances_data:/data/frp-instances
+      - frp_logs:/var/log/frp
       - ./certs:/certs:ro        # SSL certificates (optional, create directory if using HTTPS)
     networks:
-      - rathole_network
+      - frp_network
       - auth-service_auth-network  # Connect to the auth service network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:7001/health"]
@@ -54,12 +54,12 @@ services:
       start_period: 40s
 
 volumes:
-  rathole_instances_data:
+  frp_instances_data:
     driver: local
-  rathole_logs:
+  frp_logs:
     driver: local
 networks:
-  rathole_network:
+  frp_network:
     driver: bridge
   auth-service_auth-network:
     external: true  # Use the existing auth service network

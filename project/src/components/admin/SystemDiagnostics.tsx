@@ -335,10 +335,10 @@ export const SystemDiagnostics: React.FC = () => {
             </div>
           </div>
 
-          {/* Rathole */}
+          {/* FRP */}
           <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl p-6 border border-slate-700">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-white">Rathole</h3>
+              <h3 className="text-lg font-semibold text-white">FRP</h3>
               <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusBadge(health.rathole.status)}`}>
                 {health.rathole.status.toUpperCase()}
               </span>
@@ -491,7 +491,7 @@ export const SystemDiagnostics: React.FC = () => {
               <option value="all">All Services</option>
               <option value="orchestrator">Orchestrator</option>
               <option value="host-agent">Host Agent</option>
-              <option value="rathole">Rathole</option>
+              <option value="rathole">FRP</option>
               <option value="auth">Auth Service</option>
             </select>
             <select

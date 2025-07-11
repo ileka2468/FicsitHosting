@@ -1,0 +1,25 @@
+services:
+  reverse-proxy:
+    image: nginx:1.25-alpine
+    container_name: reverse-proxy
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./certs:/etc/nginx/certs:ro
+    ports:
+      - "443:443"
+    depends_on:
+      - auth-service
+      - frp-instance-manager
+      # - satisfactory-orchestrator
+    networks:
+      - auth-service_auth-network
+      - frp-server_frp_network
+      # - orchestrator_satisfactory-network
+
+networks:
+  auth-service_auth-network:
+    external: true
+  frp-server_frp_network:
+    external: true
+  orchestrator_satisfactory-network:
+    external: true

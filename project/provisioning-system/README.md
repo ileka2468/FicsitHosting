@@ -21,7 +21,7 @@ A comprehensive Spring Boot-based system for provisioning and managing Satisfact
 ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
 │ Node 1      │    │ Node 2      │    │ Node 3      │
 │ Host Agent  │    │ Host Agent  │    │ Host Agent  │
-│ + Rathole   │    │ + Rathole   │    │ + Rathole   │
+│ + FRP       │    │ + FRP       │    │ + FRP       │
 │ Client      │    │ Client      │    │ Client      │
 └─────────────┘    └─────────────┘    └─────────────┘
         │                      │                      │
@@ -30,7 +30,7 @@ A comprehensive Spring Boot-based system for provisioning and managing Satisfact
                                ▼
                     ┌─────────────────┐
                     │ VPS (Public)    │
-                    │ Rathole Server  │
+                    │ FRP Server      │
                     │ + Control API   │
                     └─────────────────┘
 ```
@@ -40,7 +40,7 @@ A comprehensive Spring Boot-based system for provisioning and managing Satisfact
 ### Core Functionality
 - **Automatic Server Provisioning**: Deploy Satisfactory servers on optimal nodes
 - **Dynamic Port Management**: Allocate and manage ports (7777/UDP game, 15000/UDP beacon)
-- **Network Tunneling**: Rathole-based tunneling for public server access
+- **Network Tunneling**: FRP-based tunneling for public server access
 - **Resource Monitoring**: Real-time CPU, memory, and disk usage tracking
 - **Load Balancing**: Intelligent node selection based on resource usage
 
@@ -80,9 +80,9 @@ provisioning-system/
 │   ├── requirements.txt         # Python dependencies
 │   └── docker-compose.yml       # Agent deployment
 │
-└── rathole-server/              # Tunnel server
-    ├── rathole-server.toml      # Rathole configuration
-    ├── rathole_api.py           # Control API service
+└── frp-server/                 # Tunnel server
+    ├── frps.ini                 # FRP configuration
+    ├── frp_instance_manager.py  # Control API service
     ├── docker-compose.yml       # Tunnel server stack
     └── README.md                # Deployment guide
 ```
@@ -95,7 +95,7 @@ provisioning-system/
 | **Database** | PostgreSQL 15 | Persistent data storage |
 | **Cache** | Redis 7 | Performance optimization |
 | **Host Agents** | Python 3.11 + Flask | Node management |
-| **Tunneling** | Rathole | Network connectivity |
+| **Tunneling** | FRP | Network connectivity |
 | **Containers** | Docker | Service isolation |
 | **Orchestration** | Docker Compose | Local deployment |
 
@@ -155,11 +155,14 @@ export ORCHESTRATOR_URL="http://your-orchestrator:8080"
 python agent.py
 ```
 
-### 6. Setup Rathole Server (VPS)
+### 6. Setup FRP Server (VPS)
 ```bash
 # On your public VPS
-cd rathole-server
+cd frp-server
 docker-compose up -d
+# Start the reverse proxy for TLS
+cd ../reverse-proxy
+docker compose up -d
 ```
 
 ## 📊 API Documentation
@@ -227,7 +230,7 @@ POST /api/nodes/{nodeId}/stats
 # Core Configuration
 server.port=8080
 app.public-ip=YOUR_VPS_IP
-app.rathole.server.host=YOUR_VPS_IP
+app.rathole.server.host=YOUR_VPS_IP  # used for FRP server
 app.rathole.api-token=your-secure-token
 
 # Database
@@ -244,7 +247,7 @@ spring.redis.password=your-redis-password
 ### Port Ranges
 - **Orchestrator**: 8080 (HTTP API)
 - **Host Agents**: 8081 (Agent API)
-- **Rathole Server**: 2333 (Client connections), 7000 (Control API)
+- **FRP Server**: 7000 (Client + API)
 - **Game Servers**: 15000-16000/UDP (allocated dynamically)
 
 ## 🏗️ Deployment
@@ -255,7 +258,7 @@ spring.redis.password=your-redis-password
    ```bash
    # Generate secure tokens
    openssl rand -hex 32  # Database password
-   openssl rand -hex 32  # Rathole token
+   openssl rand -hex 32  # FRP token
    openssl rand -hex 32  # JWT secret
    ```
 
@@ -275,16 +278,25 @@ spring.redis.password=your-redis-password
    ```
 
 4. **Reverse Proxy** (Nginx):
+   Use the `reverse-proxy` service to terminate TLS and route requests to the
+   internal containers. Example configuration:
    ```nginx
    server {
        listen 443 ssl;
-       server_name api.yourdomain.com;
-       
-       location / {
-           proxy_pass http://localhost:8080;
-           proxy_set_header Host $host;
-           proxy_set_header X-Real-IP $remote_addr;
+       ssl_certificate /etc/nginx/certs/server.crt;
+       ssl_certificate_key /etc/nginx/certs/server.key;
+
+       location /auth/ {
+           proxy_pass http://auth-service:8081/;
        }
+
+       location /manager/ {
+           proxy_pass http://frp-instance-manager:7001/;
+       }
+
+       # location /orchestrator/ {
+       #     proxy_pass http://satisfactory-orchestrator:8080/;
+       # }
    }
    ```
 
@@ -305,8 +317,8 @@ curl http://localhost:8080/actuator/health
 # Node agent health
 curl http://node-ip:8081/api/health
 
-# Rathole server status
-curl http://vps-ip:7001/api/tunnels/status?token=your-token
+# frps status (example dashboard API)
+curl http://vps-ip:7500/api/health -u admin:strongpwd
 ```
 
 ### Metrics
@@ -328,9 +340,9 @@ curl http://vps-ip:7001/api/tunnels/status?token=your-token
 
 2. **Tunnel Failures**:
    ```bash
-   # Check Rathole status
-   docker logs rathole-server
-   curl http://vps-ip:7001/api/tunnels?token=your-token
+   # Check frps status
+   docker logs frp-instance-manager
+   curl http://vps-ip:7500/api/proxy -u admin:strongpwd
    ```
 
 3. **Database Connection Issues**:

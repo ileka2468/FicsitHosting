@@ -1,8 +1,8 @@
-# Individual Rathole Instances Setup Guide
+# FRP Setup Guide
 
 ## Overview
 
-This guide explains how to deploy the new **individual Rathole instances** architecture, where each game server gets its own isolated Rathole tunnel setup.
+This guide explains how to deploy the new **FRP-based tunneling** architecture. Each game server receives its own dynamic port assignments managed by the instance manager.
 
 ## Architecture Changes
 
@@ -12,12 +12,10 @@ Internet → Shared Rathole Server → Multiple Clients → Multiple Game Server
           (Single point of failure, restarts affect all servers)
 ```
 
-### After (Individual Instances)
+### After (FRP)
 ```
-Internet → Individual Rathole Server Instance 1 → Client 1 → Game Server 1
-        → Individual Rathole Server Instance 2 → Client 2 → Game Server 2
-        → Individual Rathole Server Instance N → Client N → Game Server N
-        (Complete isolation, no shared state)
+Internet → frps → frpc (per server) → Game Server
+        (Single frps process handles all tunnels)
 ```
 
 ## Components

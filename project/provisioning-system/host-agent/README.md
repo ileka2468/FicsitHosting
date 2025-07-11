@@ -55,3 +55,5 @@ environment:
 - Set `USE_CONTAINER_HOSTNAMES` to `false` in production if the host agent and
   game servers are on separate Docker hosts
 - Use `/api/rathole/clients/shutdown-all` to close all active tunnels
+- FRP client logs are written to `/var/log/frp/<server_id>.log` inside the
+  container
