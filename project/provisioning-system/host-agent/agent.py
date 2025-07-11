@@ -41,7 +41,8 @@ FRP_LOG_DIR = os.environ.get('FRP_LOG_DIR', '/var/log/frp')
 os.makedirs(FRP_LOG_DIR, exist_ok=True)
 
 # Authentication Configuration
-USE_HTTPS_RATHOLE = os.environ.get('USE_HTTPS_RATHOLE', 'false').lower() == 'true'
+# Enable HTTPS communication with the instance manager by default
+USE_HTTPS_RATHOLE = os.environ.get('USE_HTTPS_RATHOLE', 'true').lower() == 'true'
 ACCESS_TOKEN = os.environ.get('ACCESS_TOKEN', None)  # Access token from orchestrator
 LEGACY_AUTH_ENABLED = os.environ.get('LEGACY_AUTH_ENABLED', 'true').lower() == 'true'
 USE_CONTAINER_HOSTNAMES = os.environ.get('USE_CONTAINER_HOSTNAMES', 'false').lower() == 'true'
@@ -161,7 +162,13 @@ def get_rathole_base_url():
     """Get the base URL for the FRP instance manager"""
     protocol = 'https' if USE_HTTPS_RATHOLE else 'http'
     port = '443' if USE_HTTPS_RATHOLE else RATHOLE_INSTANCE_MANAGER_PORT
-    return f"{protocol}://{RATHOLE_INSTANCE_MANAGER_HOST}:{port}"
+
+    base = f"{protocol}://{RATHOLE_INSTANCE_MANAGER_HOST}:{port}"
+
+    # When routed through the nginx reverse proxy the manager lives under
+    # the `/manager` path. Prefix all requests with this path so that the
+    # URLs resolve correctly when HTTPS is enabled.
+    return f"{base}/manager"
 
 def create_tunnel_instance(server_id, game_port, beacon_port):
     """Create a tunnel instance on the FRP instance manager"""
