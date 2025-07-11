@@ -10,7 +10,6 @@ services:
       - "7000:7000/udp"
       - "7500:7500"          # frps dashboard
       - "7001:7001"           # Instance Manager API (HTTP)
-      - "443:443"             # Instance Manager API (HTTPS)
       - "40000-40100:40000-40100/tcp"  # Port range for tunneled game traffic
       - "40000-40100:40000-40100/udp"  # Port range for tunneled game traffic (UDP)
     environment:

@@ -22,7 +22,6 @@ services:
       - mailhog
     networks:
       - auth-network
-      - orchestrator_satisfactory-network
 
   auth-db:
     image: postgres:15-alpine
@@ -54,5 +53,3 @@ volumes:
 networks:
   auth-network:
     driver: bridge
-  orchestrator_satisfactory-network:
-    external: true

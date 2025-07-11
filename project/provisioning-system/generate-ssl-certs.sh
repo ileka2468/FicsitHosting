@@ -9,7 +9,7 @@ STATE="Local"
 CITY="Development"
 ORG="Satisfactory Host"
 UNIT="IT Department"
-COMMON_NAME="rathole-manager.local"
+COMMON_NAME="frp-manager.local"
 
 echo "Generating self-signed SSL certificates for development..."
 echo "Common Name: $COMMON_NAME"
