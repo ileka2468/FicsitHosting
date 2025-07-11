@@ -49,10 +49,6 @@ RATHOLE_BINARY=/usr/local/bin/rathole              # Path to Rathole binary
 BASE_DATA_DIR=/data/rathole-instances              # Directory for instance configs
 PUBLIC_IP=your-public-vps-ip                      # Public IP for tunnel endpoints
 
-# === PORT ALLOCATION ===
-RATHOLE_PORT_START=10000                           # Start of port range for instances
-RATHOLE_PORT_END=20000                             # End of port range for instances
-
 # === FLASK SETTINGS ===
 FLASK_ENV=production                               # production or development
 ```
@@ -142,7 +138,7 @@ curl http://host-node-ip:8081/api/rathole/clients
 ## Important Notes
 
 - **Security**: Use a strong, unique token for `RATHOLE_TOKEN`
-- **Firewall**: Ensure ports 7001 and 10000-20000 are open on your VPS
+- **Firewall**: Ensure ports 7001 and 30000-35000 are open on your VPS
 - **DNS**: Consider using domain names instead of IP addresses for better management
 - **Backup**: Keep track of your environment variables for disaster recovery
 - **Monitoring**: Monitor the instance manager and host agent logs for issues
@@ -161,8 +157,7 @@ curl http://host-node-ip:8081/api/rathole/clients
    - Check for whitespace or encoding issues
 
 3. **"No available ports"**
-   - Increase `RATHOLE_PORT_END` or clean up old instances
-   - Check port conflicts with other services
+  - Check port conflicts with other services
 
 4. **"Process already exists"**
    - Restart host agent to clean up zombie processes
