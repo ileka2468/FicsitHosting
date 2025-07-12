@@ -338,16 +338,24 @@ def prepare_rathole_client_config(server_id, server_name, game_port, beacon_port
         print(f"Failed to prepare FRP config for {server_id}: {exc}")
         return None
 
-def start_rathole_client(server_id, server_name, game_port, beacon_port):
+def start_rathole_client(
+    server_id,
+    server_name,
+    game_port,
+    beacon_port,
+    frps_port=None,
+    frps_token=None,
+):
     """Launch an FRP client whose tunnel ports match the container’s bind ports."""
     try:
-        # 1️⃣ Create (or refresh) the tunnel instance
-        success, frps_port, frps_token = create_tunnel_instance(
-            server_id, game_port, beacon_port
-        )
-        if not success:
-            print(f"Failed to create tunnel instance for {server_id}")
-            return False
+        # 1️⃣ Create (or refresh) the tunnel instance when details are not supplied
+        if frps_port is None or frps_token is None:
+            success, frps_port, frps_token = create_tunnel_instance(
+                server_id, game_port, beacon_port
+            )
+            if not success:
+                print(f"Failed to create tunnel instance for {server_id}")
+                return False, None, None
 
         # 2️⃣ Prepare the client.cfg on disk
         rathole_dir = f"/data/frp/{server_id}"
@@ -392,11 +400,11 @@ def start_rathole_client(server_id, server_name, game_port, beacon_port):
             f"✓ Started FRP client for {server_id} on port {frps_port} "
             f"with token {frps_token} (PID {proc.pid})"
         )
-        return True
+        return True, frps_port, frps_token
 
     except Exception as exc:
         print(f"Failed to start FRP client for {server_id}: {exc}")
-        return False
+        return False, None, None
 
 def stop_rathole_client(server_id):
     """Stop the FRP client process for a specific server"""
@@ -519,12 +527,15 @@ def spawn_container():
         # Create docker network for the server
         subprocess.run(['docker', 'network', 'create', network_name], check=False)
 
-        # Prepare FRP client configuration file
-        frp_config_path = prepare_rathole_client_config(
-            server_id, server_name, game_port, beacon_port)
-        if not frp_config_path:
-            print(f"Warning: failed to prepare FRP config for {server_id}")
-            frp_config_path = f"/data/frp/{server_id}/client.toml"
+        # Start FRP client and create config
+        success, frps_port, frps_token = start_rathole_client(
+            server_id, server_name, game_port, beacon_port
+        )
+        frp_config_path = f"/data/frp/{server_id}/client.toml"
+        if not success:
+            print(f"Warning: failed to start FRP client for {server_id}")
+            frps_port = None
+            frps_token = None
 
         # Generate Docker Compose configuration
         compose_config = generate_docker_compose_config(
@@ -571,7 +582,9 @@ def spawn_container():
             'network_name': network_name,
             'compose_file': compose_file_path,
             'server_dir': server_dir,
-            'started_at': datetime.now().isoformat()
+            'started_at': datetime.now().isoformat(),
+            'frps_port': frps_port,
+            'frps_token': frps_token,
         }
         
         print(f"Successfully spawned container {server_id} with ID: {container_id}")
@@ -582,6 +595,8 @@ def spawn_container():
             'serverId': server_id,
             'gamePort': game_port,
             'beaconPort': beacon_port,
+            'frpsPort': frps_port,
+            'frpsToken': frps_token,
             'message': f'Container {server_id} spawned successfully using Docker Compose'
         })
         
@@ -875,10 +890,15 @@ def start_rathole_client_endpoint(server_id):
                 'message': 'gamePort and beaconPort are required'
             }), 400
         
-        if start_rathole_client(server_id, server_name, game_port, beacon_port):
+        success, frps_port, frps_token = start_rathole_client(
+            server_id, server_name, game_port, beacon_port
+        )
+        if success:
             return jsonify({
                 'status': 'success',
-                'message': f'FRP client started for {server_id}'
+                'message': f'FRP client started for {server_id}',
+                'frpsPort': frps_port,
+                'frpsToken': frps_token,
             })
         else:
             return jsonify({

@@ -66,13 +66,15 @@ def test_instance_lifecycle(client, monkeypatch):
             'server_id': server_id,
             'game_port': game_port,
             'query_port': query_port,
-            'tunnel_game_port': game_port,
+            'tunnel_game_port': 5000,
             'tunnel_query_port': query_port,
             'owner_id': owner_id,
-            'owner_username': owner_username
+            'owner_username': owner_username,
+            'frps_port': 5000,
+            'frps_token': 'tok'
         }
         manager.instances[server_id] = inst
-        proc = start_dummy_frps(game_port)
+        proc = start_dummy_frps(5000)
         started[server_id] = proc
         time.sleep(0.3)
         return {'status': 'success', **inst}
@@ -89,7 +91,7 @@ def test_instance_lifecycle(client, monkeypatch):
     monkeypatch.setattr(manager, 'remove_instance', fake_remove)
 
     headers = {'X-API-Token': API_TOKEN}
-    data = {'server_id': 'srv1', 'game_port': 33000}
+    data = {'server_id': 'srv1', 'game_port': 35000}
     resp = client.post('/api/instances', json=data, headers=headers)
     assert resp.status_code == 200
     body = resp.get_json()
@@ -103,7 +105,7 @@ def test_instance_lifecycle(client, monkeypatch):
     assert cfg_resp.status_code == 200
     cfg = cfg_resp.get_json()['config']
     assert str(port) in cfg
-    assert API_TOKEN in cfg
+    assert 'tok' in cfg
 
     del_resp = client.delete(f'/api/instances/{data["server_id"]}', headers=headers)
     assert del_resp.status_code == 200
