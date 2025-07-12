@@ -216,18 +216,27 @@ public class HostAgentService {
     /**
      * Start Rathole client on host agent
      */
-    public Mono<Map<String, Object>> startRatholeClient(String nodeIpAddress, String serverId, int gamePort, int beaconPort) {
+    public Mono<Map<String, Object>> startRatholeClient(String nodeIpAddress, String serverId,
+                                                        int gamePort, int beaconPort,
+                                                        Integer frpsPort, String frpsToken) {
         WebClient webClient = webClientBuilder.build();
-        
+
         Map<String, Object> request = new HashMap<>();
         request.put("gamePort", gamePort);
         request.put("beaconPort", beaconPort);
-        
+        if (frpsPort != null) request.put("frpsPort", frpsPort);
+        if (frpsToken != null) request.put("frpsToken", frpsToken);
+
         return webClient.post()
                 .uri("http://" + nodeIpAddress + ":" + hostAgentPort + "/api/rathole/clients/" + serverId + "/start")
                 .bodyValue(request)
                 .retrieve()
                 .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {});
+    }
+
+    public Mono<Map<String, Object>> startRatholeClient(String nodeIpAddress, String serverId,
+                                                        int gamePort, int beaconPort) {
+        return startRatholeClient(nodeIpAddress, serverId, gamePort, beaconPort, null, null);
     }
     
     /**

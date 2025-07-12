@@ -126,9 +126,9 @@ local_addr = "127.0.0.1:15000"
 
 The orchestrator:
 
-1. **Allocates ports via the instance manager**
+1. **Allocates ports via the instance manager** and captures the returned `frps_port` and `frps_token`
 2. **Coordinates timing**:
-   - frpc configuration is fetched after container spawn success
+   - These values are forwarded to host agents when spawning or starting containers
    - Instance entry removed on server stop/delete
 
 ## File Structure

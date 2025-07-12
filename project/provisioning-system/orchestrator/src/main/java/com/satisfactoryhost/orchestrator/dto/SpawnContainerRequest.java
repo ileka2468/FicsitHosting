@@ -31,6 +31,9 @@ public class SpawnContainerRequest {
     private String serverPassword;
     
     private Map<String, String> environmentVariables = new HashMap<>();
+
+    private Integer frpsPort;
+    private String frpsToken;
     
     // Constructors
     public SpawnContainerRequest() {}
@@ -75,4 +78,10 @@ public class SpawnContainerRequest {
     
     public Map<String, String> getEnvironmentVariables() { return environmentVariables; }
     public void setEnvironmentVariables(Map<String, String> environmentVariables) { this.environmentVariables = environmentVariables; }
+
+    public Integer getFrpsPort() { return frpsPort; }
+    public void setFrpsPort(Integer frpsPort) { this.frpsPort = frpsPort; }
+
+    public String getFrpsToken() { return frpsToken; }
+    public void setFrpsToken(String frpsToken) { this.frpsToken = frpsToken; }
 }

@@ -249,8 +249,41 @@ def get_rathole_client_config_from_manager(server_id):
         print(f"Error getting client config for {server_id}: {str(e)}")
         return None
 
-def generate_rathole_client_config(server_id, server_name, game_port, beacon_port):
+def generate_rathole_client_config(server_id, server_name, game_port, beacon_port, frps_port=None, frps_token=None):
     """Generate FRP client configuration for a specific server (fallback method)"""
+    if frps_port and frps_token:
+        host_part = server_id if USE_CONTAINER_HOSTNAMES else '0.0.0.0'
+        cfg = f"""
+[common]
+server_addr = {RATHOLE_INSTANCE_MANAGER_HOST}
+server_port = {frps_port}
+auth.method = "token"
+auth.token  = {frps_token}
+auth.additionalScopes = ["HeartBeats", "NewWorkConns"]
+transport.tls.enable = {str(USE_HTTPS_RATHOLE).lower()}
+
+[{server_id}_game_tcp]
+type        = tcp
+local_ip    = {host_part}
+local_port  = {game_port}
+remote_port = 0
+
+[{server_id}_game_udp]
+type        = udp
+local_ip    = {host_part}
+local_port  = {game_port}
+remote_port = 0
+"""
+        if beacon_port:
+            cfg += f"""
+[{server_id}_query]
+type        = tcp
+local_ip    = {host_part}
+local_port  = {beacon_port}
+remote_port = 0
+"""
+        return cfg
+
     # Try to get config from instance manager first
     config = get_rathole_client_config_from_manager(server_id)
     if config:
@@ -290,20 +323,22 @@ remote_port = 0
 """
     return config
 
-def start_rathole_client(server_id, server_name, game_port, beacon_port):
+def start_rathole_client(server_id, server_name, game_port, beacon_port, frps_port=None, frps_token=None):
     """Launch an FRP client whose tunnel ports match the container’s bind ports."""
     try:
-        # 1️⃣ Create (or refresh) the tunnel instance
-        if not create_tunnel_instance(server_id, game_port, beacon_port):
-            print(f"Failed to create tunnel instance for {server_id}")
-            return False
+        if frps_port is None or frps_token is None:
+            # 1️⃣ Create (or refresh) the tunnel instance if details not provided
+            if not create_tunnel_instance(server_id, game_port, beacon_port):
+                print(f"Failed to create tunnel instance for {server_id}")
+                return False
 
         # 2️⃣ Prepare the client.cfg on disk
         rathole_dir = f"/data/frp/{server_id}"
         os.makedirs(rathole_dir, exist_ok=True)
 
         cfg = generate_rathole_client_config(server_id, server_name,
-                                             game_port, beacon_port)
+                                             game_port, beacon_port,
+                                             frps_port, frps_token)
         cfg_path = f"{rathole_dir}/client.toml"
         with open(cfg_path, "w") as fh:
             fh.write(cfg)
@@ -325,6 +360,8 @@ def start_rathole_client(server_id, server_name, game_port, beacon_port):
             "rathole_dir": rathole_dir,
             "game_port": game_port,
             "beacon_port": beacon_port,
+            "frps_port": frps_port,
+            "frps_token": frps_token,
             "started_at": datetime.now().isoformat(),
             "log_path": log_path
         }
@@ -427,6 +464,8 @@ def spawn_container():
         max_players = data['maxPlayers']
         server_password = data.get('serverPassword')
         environment_vars = data.get('environmentVariables', {})
+        frps_port = data.get('frpsPort')
+        frps_token = data.get('frpsToken')
         
         print(f"Received spawn request for {server_id}:")
         print(f"  Server Name: {server_name}")
@@ -499,7 +538,7 @@ def spawn_container():
         print(f"Successfully spawned container {server_id} with ID: {container_id}")
         
         # Start the FRP client process to establish tunnel
-        if start_rathole_client(server_id, server_name, game_port, beacon_port):
+        if start_rathole_client(server_id, server_name, game_port, beacon_port, frps_port, frps_token):
             print(f"FRP client started successfully for {server_id}")
         else:
             print(f"Warning: Failed to start FRP client for {server_id}")
@@ -782,6 +821,8 @@ def start_rathole_client_endpoint(server_id):
         server_name = data.get('serverName', f'server-{server_id}')
         game_port = data.get('gamePort')
         beacon_port = data.get('beaconPort')
+        frps_port = data.get('frpsPort')
+        frps_token = data.get('frpsToken')
         
         if not game_port or not beacon_port:
             return jsonify({
@@ -789,7 +830,7 @@ def start_rathole_client_endpoint(server_id):
                 'message': 'gamePort and beaconPort are required'
             }), 400
         
-        if start_rathole_client(server_id, server_name, game_port, beacon_port):
+        if start_rathole_client(server_id, server_name, game_port, beacon_port, frps_port, frps_token):
             return jsonify({
                 'status': 'success',
                 'message': f'FRP client started for {server_id}'

@@ -57,6 +57,12 @@ public class ProvisioningService {
     
     @Value("${app.auth-service-url:http://auth-service:8081}")
     private String authServiceUrl;
+
+    @Value("${app.instance-manager.host:frp-instance-manager}")
+    private String instanceManagerHost;
+
+    @Value("${app.instance-manager.port:7001}")
+    private int instanceManagerPort;
     
     /**
      * Validate JWT token with auth service and return user info
@@ -119,9 +125,39 @@ public class ProvisioningService {
         if (hasRole(user, "ADMIN") || hasRole(user, "SERVICE_ACCOUNT")) {
             return true;
         }
-        
+
         // Users can only access their own servers
         return server.getUserId().equals(user.getId().toString());
+    }
+
+    /**
+     * Create tunnel instance via instance manager and return details
+     */
+    private Map<String, Object> createTunnelInstance(String jwt, String serverId, int gamePort, int beaconPort) {
+        WebClient webClient = webClientBuilder.build();
+
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("server_id", serverId);
+        payload.put("game_port", gamePort);
+        payload.put("query_port", beaconPort);
+
+        WebClient.RequestBodySpec spec = webClient.post()
+            .uri("http://" + instanceManagerHost + ":" + instanceManagerPort + "/api/instances");
+
+        if (jwt != null && !jwt.isBlank()) {
+            String header = jwt.startsWith("Bearer") ? jwt : "Bearer " + jwt;
+            spec = spec.header("Authorization", header);
+        }
+
+        try {
+            return spec.bodyValue(payload)
+                .retrieve()
+                .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
+                .block();
+        } catch (Exception ex) {
+            System.err.println("Failed to create tunnel instance: " + ex.getMessage());
+            return new HashMap<>();
+        }
     }
     
     /**
@@ -184,6 +220,18 @@ public class ProvisioningService {
         // Update node's next available port
         nodeRepository.save(selectedNode);
         
+        // Create tunnel instance and capture frps details
+        Map<String, Object> tunnelInfo = createTunnelInstance(jwt, serverId,
+                portResult.getGamePort(), portResult.getBeaconPort());
+        Integer frpsPort = null;
+        String frpsToken = null;
+        if (tunnelInfo != null) {
+            Object p = tunnelInfo.get("frps_port");
+            if (p instanceof Number) frpsPort = ((Number) p).intValue();
+            Object t = tunnelInfo.get("frps_token");
+            if (t instanceof String) frpsToken = (String) t;
+        }
+
         // Create spawn request for host agent
         SpawnContainerRequest spawnRequest = new SpawnContainerRequest(
             serverId,
@@ -195,6 +243,8 @@ public class ProvisioningService {
             request.getMaxPlayers(),
             request.getServerPassword()
         );
+        spawnRequest.setFrpsPort(frpsPort);
+        spawnRequest.setFrpsToken(frpsToken);
         
         // Configure Satisfactory server environment variables
         Map<String, String> envVars = new HashMap<>();
@@ -410,16 +460,29 @@ public class ProvisioningService {
         server.setStatus(GameServer.ServerStatus.STARTING);
         gameServerRepository.save(server);
         
+        Map<String, Object> tunnelInfo = createTunnelInstance(jwt, serverId,
+                server.getGamePort(), server.getBeaconPort());
+        Integer frpsPort = null;
+        String frpsToken = null;
+        if (tunnelInfo != null) {
+            Object p = tunnelInfo.get("frps_port");
+            if (p instanceof Number) frpsPort = ((Number) p).intValue();
+            Object t = tunnelInfo.get("frps_token");
+            if (t instanceof String) frpsToken = (String) t;
+        }
+
         // Send start request to host agent
         hostAgentService.startContainer(server.getNode().getIpAddress(), serverId, jwt)
+            .flatMap(resp -> hostAgentService.startRatholeClient(
+                    server.getNode().getIpAddress(), serverId,
+                    server.getGamePort(), server.getBeaconPort(),
+                    frpsPort, frpsToken))
             .subscribe(
                 response -> {
                     server.setStatus(GameServer.ServerStatus.RUNNING);
                     server.setStartedAt(ZonedDateTime.now(ZoneOffset.UTC));
                     gameServerRepository.save(server);
-                    
-                    // Host agent handles tunnel configuration
-                    System.out.println("Container started successfully. Tunnel already configured by host agent for server: " + server.getServerId());
+                    System.out.println("Container and tunnel started for server: " + server.getServerId());
                 },
                 error -> {
                     server.setStatus(GameServer.ServerStatus.ERROR);
