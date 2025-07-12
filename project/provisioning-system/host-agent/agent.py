@@ -211,15 +211,20 @@ def create_tunnel_instance(server_id, game_port, beacon_port):
         if response.status_code == 200:
             data = response.json()
             if data.get('status') == 'success':
-                print(f"✓ Created tunnel instance for {server_id} using {'access token' if ACCESS_TOKEN else 'legacy auth'}")
-                return True
-        
+                frps_port = data.get('frps_port')
+                frps_token = data.get('frps_token')
+                print(
+                    f"✓ Created tunnel instance for {server_id} using {'access token' if ACCESS_TOKEN else 'legacy auth'} "
+                    f"(frps_port={frps_port}, frps_token={frps_token})"
+                )
+                return True, frps_port, frps_token
+
         print(f"Failed to create tunnel instance for {server_id}: {response.status_code} - {response.text}")
-        return False
+        return False, None, None
         
     except Exception as e:
         print(f"Error creating tunnel instance for {server_id}: {str(e)}")
-        return False
+        return False, None, None
 
 def get_rathole_client_config_from_manager(server_id):
     """Get FRP client configuration from the instance manager"""
@@ -261,7 +266,14 @@ def get_rathole_client_config_from_manager(server_id):
         print(f"Error getting client config for {server_id}: {str(e)}")
         return None
 
-def generate_rathole_client_config(server_id, server_name, game_port, beacon_port):
+def generate_rathole_client_config(
+        server_id,
+        server_name,
+        game_port,
+        beacon_port,
+        frps_port=None,
+        frps_token=None,
+):
     """Generate FRP client configuration for a specific server (fallback method)"""
     # Try to get config from instance manager first
     config = get_rathole_client_config_from_manager(server_id)
@@ -273,12 +285,15 @@ def generate_rathole_client_config(server_id, server_name, game_port, beacon_por
     # Determine how to address the Satisfactory server container locally
     host_part = server_id if USE_CONTAINER_HOSTNAMES else '0.0.0.0'
 
+    port_value = frps_port or RATHOLE_INSTANCE_MANAGER_PORT
+    token_value = frps_token or RATHOLE_TOKEN
+
     config = f"""
 [common]
 server_addr = {RATHOLE_INSTANCE_MANAGER_HOST}
-server_port = {RATHOLE_INSTANCE_MANAGER_PORT}
+server_port = {port_value}
 auth.method = "token"
-auth.token  = {RATHOLE_TOKEN}
+auth.token  = {token_value}
 auth.additionalScopes = ["HeartBeats", "NewWorkConns"]
 transport.tls.enable = {str(USE_HTTPS_RATHOLE).lower()}
 
@@ -327,7 +342,10 @@ def start_rathole_client(server_id, server_name, game_port, beacon_port):
     """Launch an FRP client whose tunnel ports match the container’s bind ports."""
     try:
         # 1️⃣ Create (or refresh) the tunnel instance
-        if not create_tunnel_instance(server_id, game_port, beacon_port):
+        success, frps_port, frps_token = create_tunnel_instance(
+            server_id, game_port, beacon_port
+        )
+        if not success:
             print(f"Failed to create tunnel instance for {server_id}")
             return False
 
@@ -335,8 +353,14 @@ def start_rathole_client(server_id, server_name, game_port, beacon_port):
         rathole_dir = f"/data/frp/{server_id}"
         os.makedirs(rathole_dir, exist_ok=True)
 
-        cfg = generate_rathole_client_config(server_id, server_name,
-                                             game_port, beacon_port)
+        cfg = generate_rathole_client_config(
+            server_id,
+            server_name,
+            game_port,
+            beacon_port,
+            frps_port,
+            frps_token,
+        )
         cfg_path = f"{rathole_dir}/client.toml"
         with open(cfg_path, "w") as fh:
             fh.write(cfg)
@@ -359,10 +383,15 @@ def start_rathole_client(server_id, server_name, game_port, beacon_port):
             "game_port": game_port,
             "beacon_port": beacon_port,
             "started_at": datetime.now().isoformat(),
-            "log_path": log_path
+            "log_path": log_path,
+            "frps_port": frps_port,
+            "frps_token": frps_token,
         }
 
-        print(f"✓ Started FRP client for {server_id} (PID {proc.pid})")
+        print(
+            f"✓ Started FRP client for {server_id} on port {frps_port} "
+            f"with token {frps_token} (PID {proc.pid})"
+        )
         return True
 
     except Exception as exc:
