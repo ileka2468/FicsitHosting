@@ -338,16 +338,24 @@ def prepare_rathole_client_config(server_id, server_name, game_port, beacon_port
         print(f"Failed to prepare FRP config for {server_id}: {exc}")
         return None
 
-def start_rathole_client(server_id, server_name, game_port, beacon_port):
+def start_rathole_client(
+        server_id,
+        server_name,
+        game_port,
+        beacon_port,
+        frps_port=None,
+        frps_token=None,
+):
     """Launch an FRP client whose tunnel ports match the container’s bind ports."""
     try:
-        # 1️⃣ Create (or refresh) the tunnel instance
-        success, frps_port, frps_token = create_tunnel_instance(
-            server_id, game_port, beacon_port
-        )
-        if not success:
-            print(f"Failed to create tunnel instance for {server_id}")
-            return False
+        # 1️⃣ Create (or refresh) the tunnel instance if values not supplied
+        if frps_port is None or frps_token is None:
+            success, frps_port, frps_token = create_tunnel_instance(
+                server_id, game_port, beacon_port
+            )
+            if not success:
+                print(f"Failed to create tunnel instance for {server_id}")
+                return False
 
         # 2️⃣ Prepare the client.cfg on disk
         rathole_dir = f"/data/frp/{server_id}"
@@ -868,6 +876,8 @@ def start_rathole_client_endpoint(server_id):
         server_name = data.get('serverName', f'server-{server_id}')
         game_port = data.get('gamePort')
         beacon_port = data.get('beaconPort')
+        frps_port = data.get('frpsPort')
+        frps_token = data.get('frpsToken')
         
         if not game_port or not beacon_port:
             return jsonify({
@@ -875,7 +885,14 @@ def start_rathole_client_endpoint(server_id):
                 'message': 'gamePort and beaconPort are required'
             }), 400
         
-        if start_rathole_client(server_id, server_name, game_port, beacon_port):
+        if start_rathole_client(
+                server_id,
+                server_name,
+                game_port,
+                beacon_port,
+                frps_port,
+                frps_token,
+        ):
             return jsonify({
                 'status': 'success',
                 'message': f'FRP client started for {server_id}'
