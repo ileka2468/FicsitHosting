@@ -37,6 +37,7 @@ RATHOLE_INSTANCE_MANAGER_HOST = '69.164.196.13'  # Instance manager host
 RATHOLE_INSTANCE_MANAGER_PORT = os.environ.get('RATHOLE_INSTANCE_MANAGER_PORT', '7001')
 RATHOLE_TOKEN = os.environ.get('RATHOLE_TOKEN', 'your-api-control-token-here')
 RATHOLE_CLIENT_BINARY = os.environ.get('RATHOLE_CLIENT_BINARY', '/usr/local/bin/frpc')
+RATHOLE_CLIENT_IMAGE = os.environ.get('RATHOLE_CLIENT_IMAGE', 'fatedier/frpc:0.57.0')
 FRP_LOG_DIR = os.environ.get('FRP_LOG_DIR', '/var/log/frp')
 os.makedirs(FRP_LOG_DIR, exist_ok=True)
 
@@ -84,7 +85,9 @@ def generate_docker_compose_config(
         game_port, beacon_port,
         ram_allocation, cpu_allocation,
         max_players, server_password,
-        environment_vars
+        environment_vars,
+        network_name,
+        frp_config_path
 ):
     """Compose file that keeps container & public ports identical."""
 
@@ -120,7 +123,7 @@ def generate_docker_compose_config(
                 "volumes": [f"./data/{server_id}:/config"],
                 "environment": env_vars,
                 "restart": "unless-stopped",
-                "networks": ["satis_network"],
+                "networks": [network_name],
                 "deploy": {
                     "resources": {
                         "limits": {
@@ -132,9 +135,18 @@ def generate_docker_compose_config(
                         }
                     }
                 }
+            },
+            f"{server_id}_frpc": {
+                "image": RATHOLE_CLIENT_IMAGE,
+                "container_name": f"{server_id}_frpc",
+                "volumes": [f"{frp_config_path}:/app/client.toml:ro"],
+                "command": ["/app/rathole", "/app/client.toml"],
+                "restart": "unless-stopped",
+                "depends_on": [server_id],
+                "networks": [network_name]
             }
         },
-        "networks": {"satis_network": {"external": True}}
+        "networks": {network_name: {"external": False}}
     }
     return compose
 
@@ -289,6 +301,27 @@ local_port  = {beacon_port}
 remote_port = 0
 """
     return config
+
+def prepare_rathole_client_config(server_id, server_name, game_port, beacon_port):
+    """Create tunnel instance and write FRP client config to disk."""
+    try:
+        if not create_tunnel_instance(server_id, game_port, beacon_port):
+            print(f"Failed to create tunnel instance for {server_id}")
+            return None
+
+        rathole_dir = f"/data/frp/{server_id}"
+        os.makedirs(rathole_dir, exist_ok=True)
+
+        cfg = generate_rathole_client_config(server_id, server_name, game_port, beacon_port)
+        cfg_path = f"{rathole_dir}/client.toml"
+        with open(cfg_path, "w") as fh:
+            fh.write(cfg)
+
+        print(f"✓ Prepared FRP config for {server_id}: {cfg_path}")
+        return cfg_path
+    except Exception as exc:
+        print(f"Failed to prepare FRP config for {server_id}: {exc}")
+        return None
 
 def start_rathole_client(server_id, server_name, game_port, beacon_port):
     """Launch an FRP client whose tunnel ports match the container’s bind ports."""
@@ -451,11 +484,26 @@ def spawn_container():
         server_dir = f'/data/satisfactory/{server_id}'
         os.makedirs(f'{server_dir}/data', exist_ok=True)
         
+        # Determine network name for this server
+        network_name = f"net_{server_id}"
+
+        # Create docker network for the server
+        subprocess.run(['docker', 'network', 'create', network_name], check=False)
+
+        # Prepare FRP client configuration file
+        frp_config_path = prepare_rathole_client_config(
+            server_id, server_name, game_port, beacon_port)
+        if not frp_config_path:
+            print(f"Warning: failed to prepare FRP config for {server_id}")
+            frp_config_path = f"/data/frp/{server_id}/client.toml"
+
         # Generate Docker Compose configuration
         compose_config = generate_docker_compose_config(
-            server_id, server_name, game_port, beacon_port, 
-            ram_allocation, cpu_allocation, max_players, 
-            server_password, environment_vars
+            server_id, server_name, game_port, beacon_port,
+            ram_allocation, cpu_allocation, max_players,
+            server_password, environment_vars,
+            network_name,
+            frp_config_path
         )
         
         # Write Docker Compose file
@@ -477,33 +525,27 @@ def spawn_container():
         
         # Get container ID using Docker Compose
         ps_result = subprocess.run([
-            'docker-compose', '-f', compose_file_path, 'ps', '-q'
+            'docker-compose', '-f', compose_file_path, 'ps', '-q', server_id
         ], capture_output=True, text=True, cwd=server_dir)
         
         if ps_result.returncode != 0:
             raise Exception(f"Failed to get container ID: {ps_result.stderr}")
         
         container_id = ps_result.stdout.strip()
-        
+
         # Track container
         running_containers[server_id] = {
             'container_id': container_id,
             'server_name': server_name,
             'game_port': game_port,
             'beacon_port': beacon_port,
+            'network_name': network_name,
             'compose_file': compose_file_path,
             'server_dir': server_dir,
             'started_at': datetime.now().isoformat()
         }
         
         print(f"Successfully spawned container {server_id} with ID: {container_id}")
-        
-        # Start the FRP client process to establish tunnel
-        if start_rathole_client(server_id, server_name, game_port, beacon_port):
-            print(f"FRP client started successfully for {server_id}")
-        else:
-            print(f"Warning: Failed to start FRP client for {server_id}")
-            # Container is still running, but tunnel may not be available
         
         return jsonify({
             'status': 'success',
@@ -540,6 +582,9 @@ def stop_container():
                 
                 # Clean up data based on type
                 cleanup_server_data(server_id, cleanup_type)
+
+                if cleanup_type == 'delete':
+                    subprocess.run(['docker', 'network', 'rm', f'net_{server_id}'], check=False)
                 
                 return jsonify({
                     'status': 'success',
@@ -555,6 +600,7 @@ def stop_container():
         container_info = running_containers[server_id]
         compose_file = container_info.get('compose_file')
         server_dir = container_info.get('server_dir')
+        network_name = container_info.get('network_name', f'net_{server_id}')
         
         if compose_file and os.path.exists(compose_file):
             if cleanup_type == 'delete':
@@ -575,8 +621,10 @@ def stop_container():
         if server_id in running_containers:
             del running_containers[server_id]
         
-        # Stop the FRP client process
-        stop_rathole_client(server_id)
+
+        # Remove network if deleting
+        if cleanup_type == 'delete':
+            subprocess.run(['docker', 'network', 'rm', network_name], check=False)
         
         # Clean up data based on type
         cleanup_server_data(server_id, cleanup_type)
@@ -673,11 +721,20 @@ def start_container():
         
         container = client.containers.get(server_id)
         container.start()
+
+        # Start accompanying FRP container if present
+        frp_name = f"{server_id}_frpc"
+        try:
+            frp_container = client.containers.get(frp_name)
+            frp_container.start()
+        except docker.errors.NotFound:
+            print(f"FRP container {frp_name} not found")
         
         # Update tracking if not already tracked
         if server_id not in running_containers:
             running_containers[server_id] = {
                 'container_id': container.id,
+                'network_name': f'net_{server_id}',
                 'started_at': datetime.now().isoformat()
             }
         
