@@ -2,6 +2,9 @@ import subprocess
 import os
 from pathlib import Path
 import types
+
+os.environ.setdefault("LEGACY_AUTH_ENABLED", "true")
+os.environ.setdefault("API_TOKEN", "test-token")
 import frp_instance_manager as fim
 
 
