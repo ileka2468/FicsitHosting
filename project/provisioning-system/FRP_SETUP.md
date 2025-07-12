@@ -9,31 +9,29 @@ This guide explains how to deploy the new **FRP-based tunneling** architecture. 
 ### Before (Shared Rathole)
 ```
 Internet → Shared Rathole Server → Multiple Clients → Multiple Game Servers
-          (Single point of failure, restarts affect all servers)
+          (single point of failure)
 ```
 
 ### After (FRP)
 ```
 Internet → frps → frpc (per server) → Game Server
-        (Single frps process handles all tunnels)
+        (each server receives a unique frps token)
 ```
 
 ## Components
 
-### 1. **Rathole Instance Manager** (`rathole_instance_manager.py`)
-- Manages individual Rathole server instances
+### 1. **FRP Instance Manager** (`frp_instance_manager.py`)
+- Allocates FRPS ports and tokens per server
 - Creates/removes instances dynamically per game server
 - Provides HTTP API for orchestrator
 - Runs on public VPS
 
-### 2. **Updated Orchestrator** 
-- Uses `RatholeService` to create/remove individual instances
+- Uses `FrpService` to create/remove individual instances
 - Coordinates with host agents for client configuration
 - No more shared tunnel management
 
-### 3. **Updated Host Agents**
-- Receives client configs from instance manager
-- Starts individual Rathole client processes per server
+- Receives FRP configs from instance manager
+- Starts individual `frpc` processes per server
 - Complete isolation between server tunnels
 
 ## Deployment Steps
@@ -68,10 +66,10 @@ On each **host node**, update environment variables:
 
 ```bash
 # /data/host-agent/.env
-RATHOLE_INSTANCE_MANAGER_HOST=your-public-vps-ip
-RATHOLE_INSTANCE_MANAGER_PORT=7001
-RATHOLE_TOKEN=your-secure-api-token
-RATHOLE_CLIENT_BINARY=/usr/local/bin/rathole
+FRP_INSTANCE_MANAGER_HOST=your-public-vps-ip
+FRP_INSTANCE_MANAGER_PORT=7001
+# unique token provided per server
+FRP_CLIENT_BINARY=/usr/local/bin/frpc
 ```
 
 Rebuild and restart host agents:
@@ -118,7 +116,7 @@ POST http://your-vps:7001/api/instances
   "server_id": "srv_user123_abcd1234",
   "game_port": 30000,
   "beacon_port": 30001,
-  "token": "your-token"
+  "token": "your-token"  # returned FRPS token
 }
 
 # Remove instance  
