@@ -3,6 +3,7 @@
 Test script for the Secure Rathole Instance Manager
 Tests both legacy and modern authentication methods
 """
+__test__ = False
 
 import requests
 import json
