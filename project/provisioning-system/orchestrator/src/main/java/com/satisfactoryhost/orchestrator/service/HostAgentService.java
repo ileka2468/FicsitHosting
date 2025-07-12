@@ -147,14 +147,14 @@ public class HostAgentService {
     }
     
     /**
-     * Configure Rathole client on host agent
+     * Configure FRP client on host agent
      */
     public Mono<Map<String, Object>> configureRatholeClient(String nodeIpAddress, String serverId, String clientConfig) {
         return configureRatholeClient(nodeIpAddress, serverId, clientConfig, null);
     }
     
     /**
-     * Configure Rathole client on host agent with access token
+     * Configure FRP client on host agent with access token
      */
     public Mono<Map<String, Object>> configureRatholeClient(String nodeIpAddress, String serverId, String clientConfig, String accessToken) {
         WebClient webClient = webClientBuilder.build();
@@ -183,7 +183,7 @@ public class HostAgentService {
     }
     
     /**
-     * Stop Rathole client on host agent with access token
+     * Stop FRP client on host agent with access token
      */
     public Mono<Map<String, Object>> stopRatholeClient(String nodeIpAddress, String serverId, String accessToken) {
         WebClient webClient = webClientBuilder.build();
@@ -207,14 +207,16 @@ public class HostAgentService {
     }
     
     /**
-     * Stop Rathole client on host agent (legacy method)
+     * Stop FRP client on host agent (legacy method)
      */
     public Mono<Map<String, Object>> stopRatholeClient(String nodeIpAddress, String serverId) {
         return stopRatholeClient(nodeIpAddress, serverId, null);
     }
     
     /**
-     * Start Rathole client on host agent
+     * Start FRP client on host agent. When frpsPort and frpsToken are provided
+     * they are passed directly to the host agent so the instance can reuse the
+     * allocated credentials.
      */
     public Mono<Map<String, Object>> startRatholeClient(
             String nodeIpAddress,
@@ -243,7 +245,7 @@ public class HostAgentService {
     }
 
     /**
-     * Start Rathole client on host agent (legacy method without frps port/token)
+     * Start FRP client on host agent (legacy method without frps port/token)
      */
     public Mono<Map<String, Object>> startRatholeClient(String nodeIpAddress, String serverId, int gamePort, int beaconPort) {
         return startRatholeClient(nodeIpAddress, serverId, gamePort, beaconPort, null, null);

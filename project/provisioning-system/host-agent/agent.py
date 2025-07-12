@@ -378,14 +378,14 @@ def start_rathole_client(
 
         # 3️⃣ Spawn frpc and log output
         log_path = f"{FRP_LOG_DIR}/{server_id}.log"
-        log_file = open(log_path, "a")
-        proc = subprocess.Popen(
-            [RATHOLE_CLIENT_BINARY, '-c', cfg_path],
-            cwd=rathole_dir,
-            stdout=log_file,
-            stderr=subprocess.STDOUT,
-            text=True,
-        )
+        with open(log_path, "a") as log_file:
+            proc = subprocess.Popen(
+                [RATHOLE_CLIENT_BINARY, '-c', cfg_path],
+                cwd=rathole_dir,
+                stdout=log_file,
+                stderr=subprocess.STDOUT,
+                text=True,
+            )
 
         frp_clients[server_id] = {
             "process": proc,
@@ -530,9 +530,14 @@ def spawn_container():
         # Create docker network for the server
         subprocess.run(['docker', 'network', 'create', network_name], check=False)
 
-        # Start FRP client and create config
+        # Optional per-server FRPS credentials
+        frps_port = data.get('frpsPort')
+        frps_token = data.get('frpsToken')
+
+        # Start FRP client and create config using provided credentials if any
         success, frps_port, frps_token = start_rathole_client(
-            server_id, server_name, game_port, beacon_port
+            server_id, server_name, game_port, beacon_port,
+            frps_port, frps_token
         )
         frp_config_path = f"/data/frp/{server_id}/client.toml"
         if not success:
@@ -897,7 +902,8 @@ def start_rathole_client_endpoint(server_id):
         
 
         success, frps_port, frps_token = start_rathole_client(
-            server_id, server_name, game_port, beacon_port
+            server_id, server_name, game_port, beacon_port,
+            frps_port, frps_token
         )
         if success:
 
@@ -1001,15 +1007,15 @@ def start_rathole_client_with_config(server_id, config_path):
         
         # Start FRP client process with logging
         log_path = f"{FRP_LOG_DIR}/{server_id}.log"
-        log_file = open(log_path, "a")
         cmd = [RATHOLE_CLIENT_BINARY, '-c', config_path]
-        process = subprocess.Popen(
-            cmd,
-            cwd=rathole_dir,
-            stdout=log_file,
-            stderr=subprocess.STDOUT,
-            text=True,
-        )
+        with open(log_path, "a") as log_file:
+            process = subprocess.Popen(
+                cmd,
+                cwd=rathole_dir,
+                stdout=log_file,
+                stderr=subprocess.STDOUT,
+                text=True,
+            )
         
         # Store process info
         frp_clients[server_id] = {
