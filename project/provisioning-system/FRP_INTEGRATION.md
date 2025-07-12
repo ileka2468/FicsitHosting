@@ -55,20 +55,20 @@ Internet → VPS (frps) → Host Node (frpc) → Satisfactory Container
 
 ```yaml
 app:
-  rathole:
+  frp:
     server:
       host: "your-public-vps-ip"
       control-port: 7000
-    api-token: "your-secure-api-token"
+    # Tokens are generated per instance by the manager
 ```
 
 ### Host Agent (Environment Variables)
 
 ```bash
-RATHOLE_SERVER_HOST=your-public-vps-ip
-RATHOLE_SERVER_PORT=2333
-RATHOLE_TOKEN=your-secure-api-token
-RATHOLE_CLIENT_BINARY=/usr/local/bin/rathole
+FRP_SERVER_HOST=your-public-vps-ip
+FRP_SERVER_PORT=7000
+# Token provided per server instance
+FRP_CLIENT_BINARY=/usr/local/bin/frpc
 ```
 
 ### frps Config
@@ -78,7 +78,8 @@ Located in `/home/orion/satis_host/project/provisioning-system/frp-server/frps.i
 ```ini
 [common]
 bind_port = 7000
-token = your-secure-api-token
+auth.method = "token"
+# token generated per instance
 dashboard_port = 7500
 dashboard_user = admin
 dashboard_pwd  = strongpwd
@@ -113,13 +114,38 @@ Each server gets its own frpc client config file:
 [common]
 server_addr = "frp-server:7000"
 server_port = 7000
-token       = "your-token"
+token       = "<instance_token>"
 
 [client.services.srv_123_game]
 local_addr = "127.0.0.1:7777"
 
 [client.services.srv_123_beacon]
 local_addr = "127.0.0.1:15000"
+```
+
+### Instance Manager Response Example
+
+```json
+{
+  "server_id": "srv_123",
+  "frps_port": 10025,
+  "token": "unique-token",
+  "network": "net_srv_123"
+}
+```
+
+### Example Docker Compose
+
+```yaml
+networks:
+  net_srv_123:
+    external: true
+services:
+  srv_123:
+    container_name: srv_123
+    networks:
+      - net_srv_123
+    # other container options...
 ```
 
 ### Orchestrator Coordination

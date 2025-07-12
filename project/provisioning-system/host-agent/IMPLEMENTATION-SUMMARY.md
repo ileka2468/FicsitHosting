@@ -32,15 +32,15 @@ local_addr = "{server_id}:{beacon_port}"
 
 **Added**:
 ```yaml
-networks: ['satis_network']  # Join the shared network
+networks: ['net_<server_id>']  # Per-server network
 
 # Added networks section
 networks:
-  satis_network:
-    external: True  # Use existing network created by host agent
+  net_<server_id>:
+    external: True  # Created by the host agent
 ```
 
-**Rationale**: All Satisfactory server containers now join the shared `satis_network` Docker network, allowing container-to-container communication.
+**Rationale**: Each Satisfactory server container now uses its own `net_<server_id>` network for isolation while still allowing container-to-container communication.
 
 ### 3. Updated Host Agent Docker Compose
 
@@ -49,9 +49,33 @@ networks:
 **Changes**:
 - Container name: `satis-host-agent`
 - Hostname: `host-agent`
-- Network: `satis_network`
+- Network: `net_<server_id>`
 - Added environment variables for modular configuration
 - Added network setup service to ensure network exists
+
+Example compose snippet:
+
+```yaml
+networks:
+  net_srv_abc:
+    external: true
+services:
+  srv_abc:
+    container_name: srv_abc
+    networks:
+      - net_srv_abc
+```
+
+The instance manager returns JSON similar to:
+
+```json
+{
+  "server_id": "srv_abc",
+  "frps_port": 10025,
+  "token": "unique-token",
+  "network": "net_srv_abc"
+}
+```
 
 ### 4. Updated Environment Configuration
 
@@ -109,7 +133,7 @@ The updated architecture now properly implements:
 │  │  └───────────────┘                  ││
 │  └─────────────────────────────────────┘│
 │                    │                    │
-│                    │ satis_network      │
+│                    │ net_<server_id>    │
 │                    ▼                    │
 │  ┌─────────────────────────────────────┐│
 │  │     Satisfactory Server Container   ││
@@ -121,7 +145,7 @@ The updated architecture now properly implements:
 
 ## Key Points
 
-1. **Network Isolation**: Both containers run on isolated `satis_network`
+1. **Network Isolation**: Each container runs on its own `net_<server_id>` network
 2. **Hostname Resolution**: Rathole client connects to `{server_id}:{port}` instead of `127.0.0.1:{port}`
 3. **Container Communication**: Direct container-to-container communication via Docker network
 4. **External Network**: The network is marked as external and created by the host agent compose file
@@ -133,7 +157,7 @@ To test the implementation:
 
 1. Deploy using `./deploy-host-agent.sh`
 2. Provision a server via orchestrator API
-3. Verify containers are on the same network: `docker network inspect satis_network`
+3. Verify containers are on the same network: `docker network inspect net_<server_id>`
 4. Test connectivity: `docker exec satis-host-agent ping {server_id}`
 5. Check Rathole config files in `/data/rathole/{server_id}/client.toml`
 
@@ -142,7 +166,7 @@ To test the implementation:
 ```bash
 # 1. Configure environment
 cp .env .env
-nano .env  # Update RATHOLE_INSTANCE_MANAGER_HOST, RATHOLE_TOKEN, etc.
+nano .env  # Update RATHOLE_INSTANCE_MANAGER_HOST and other settings
 
 # 2. Deploy
 ./deploy-host-agent.sh
