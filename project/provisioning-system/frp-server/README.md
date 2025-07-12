@@ -67,6 +67,25 @@ Player/Admin → Orchestrator (RBAC) → Host Agent → FRP Manager (Token Valid
    docker-compose up -d
    ```
 
+## Per-Server FRPS Mode
+
+In addition to running a single shared `frps` process you can launch a
+dedicated frps instance for every game server. The instance manager will
+allocate a free port and generate a unique token for that server. The API
+response includes these values so the host agent can start `frpc` with the
+correct credentials.
+
+```json
+{
+  "server_id": "srv_example",
+  "frps_port": 10025,
+  "token": "frps-token-abc123"
+}
+```
+
+Use the returned port and token when generating the client configuration. Each
+server’s tunnels are isolated from the others.
+
 ## API Endpoints
 
 ### Public Endpoints

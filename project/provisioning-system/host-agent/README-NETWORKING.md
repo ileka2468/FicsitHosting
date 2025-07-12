@@ -9,7 +9,7 @@ This host agent runs in a Docker container and manages both Rathole clients and 
 │                    Docker Host                              │
 │                                                             │
 │  ┌─────────────────────────────────────────────────────┐    │
-│  │              satis_network (Bridge)                │    │
+│  │              net_<server_id> (Bridge)              │    │
 │  │                                                    │    │
 │  │  ┌──────────────────┐    ┌─────────────────────┐   │    │
 │  │  │   Host Agent     │    │  Satisfactory       │   │    │
@@ -55,7 +55,7 @@ This host agent runs in a Docker container and manages both Rathole clients and 
 ## Network Communication
 
 ### 1. Host Agent to Satisfactory Server
-- **Connection**: Docker network `satis_network`
+- **Connection**: Docker network `net_<server_id>`
 - **Address**: Uses container hostname (e.g., `server1:7777`)
 - **Protocol**: Direct container-to-container communication
 
@@ -92,7 +92,7 @@ nano .env
 ```bash
 # Update these in .env:
 RATHOLE_INSTANCE_MANAGER_HOST=your-vps-ip
-RATHOLE_TOKEN=your-secure-token
+# token is provided per server instance
 HOST_AGENT_API_KEY=your-api-key
 NODE_ID=unique-node-identifier
 ```
@@ -108,7 +108,7 @@ NODE_ID=unique-node-identifier
 ```bash
 # The host agent API will:
 # 1. Create a new container with hostname = server_id
-# 2. Connect it to satis_network
+# 2. Connect it to net_<server_id>
 # 3. Start a Rathole client process
 # 4. Configure client to connect to container by hostname
 ```
@@ -116,7 +116,7 @@ NODE_ID=unique-node-identifier
 ### Docker Network Details
 ```bash
 # View network
-docker network inspect satis_network
+docker network inspect net_<server_id>
 
 # List containers on network
 docker network ls
@@ -153,17 +153,17 @@ docker exec satis-host-agent ps aux | grep rathole
 
 ## Security Notes
 
-1. **Network Isolation**: All containers run on isolated `satis_network`
+1. **Network Isolation**: Each container runs on its own `net_<server_id>` network
 2. **No Host Network**: Containers don't use host networking mode
 3. **Port Binding**: Only necessary ports are exposed to host
-4. **Token Security**: Rathole tokens should be unique and secure
+4. **Token Security**: Each FRP client receives a unique token from the instance manager
 
 ## Rathole Client Lifecycle
 
 1. **Server Provisioning**: Orchestrator calls host agent API
 2. **Container Creation**: Host agent creates Satisfactory server container
-3. **Network Connection**: Container joins `satis_network` with hostname = server_id
+3. **Network Connection**: Container joins `net_<server_id>` with hostname = server_id
 4. **Client Registration**: Host agent calls instance manager to register server
 5. **Config Generation**: Instance manager returns client config with correct hostname
-6. **Client Start**: Host agent starts Rathole client process with generated config
+6. **Client Start**: Host agent starts frpc with the generated config
 7. **Tunnel Establishment**: Client connects to server container via Docker network
