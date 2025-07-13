@@ -89,7 +89,7 @@ def generate_docker_compose_config(
         network_name,
         frp_config_path
 ):
-    """Compose file that keeps container & public ports identical."""
+    """Compose file that keeps container & public ports identical, and spawns frpc as a sidecar container."""
 
     ram_allocation = ram_allocation or 4
     cpu_allocation = cpu_allocation or 2
@@ -102,19 +102,18 @@ def generate_docker_compose_config(
         "STEAMBETA": "false",
         "SKIPUPDATE": "false",
         "TIMEOUT": "30",
-        # ✨ NEW – tell the image which ports it must *both bind and advertise*
-        "SERVERGAMEPORT": str(game_port),       # 7777 replacement
-        "SERVERMESSAGINGPORT": str(beacon_port) # 8888 replacement
+        "SERVERGAMEPORT": str(game_port),
+        "SERVERMESSAGINGPORT": str(beacon_port)
     }
     env_vars.update(environment_vars or {})
 
     compose = {
+        "version": "3.8",
         "services": {
             server_id: {
                 "image": "wolveix/satisfactory-server:latest",
                 "container_name": server_id,
                 "hostname": server_id,
-                # 1 : 1 mapping – no remap, no NAT mismatch
                 "ports": [
                     f"{game_port}:{game_port}/udp",
                     f"{game_port}:{game_port}/tcp",
@@ -137,16 +136,16 @@ def generate_docker_compose_config(
                 }
             },
             f"{server_id}_frpc": {
-                "image": RATHOLE_CLIENT_IMAGE,
+                "image": "fatedier/frpc:0.57.0",
                 "container_name": f"{server_id}_frpc",
-                "volumes": [f"{frp_config_path}:/app/client.toml:ro"],
-                "command": ["/app/rathole", "/app/client.toml"],
+                "volumes": [f"{frp_config_path}:/frpc/frpc.ini:ro"],
+                "command": ["frpc", "-c", "/frpc/frpc.ini"],
                 "restart": "unless-stopped",
                 "depends_on": [server_id],
                 "networks": [network_name]
             }
         },
-        "networks": {network_name: {"external": False}}
+        "networks": {network_name: {"driver": "bridge"}}
     }
     return compose
 
@@ -534,24 +533,13 @@ def spawn_container():
         frps_port = data.get('frpsPort')
         frps_token = data.get('frpsToken')
 
-        # Start FRP client and create config using provided credentials if any
-        success, frps_port, frps_token = start_rathole_client(
-            server_id, server_name, game_port, beacon_port,
-            frps_port, frps_token
-        )
-        frp_config_path = f"/data/frp/{server_id}/client.toml"
-        if not success:
-            print(f"Warning: failed to start FRP client for {server_id}")
-            frps_port = None
-            frps_token = None
-
         # Generate Docker Compose configuration
         compose_config = generate_docker_compose_config(
             server_id, server_name, game_port, beacon_port,
             ram_allocation, cpu_allocation, max_players,
             server_password, environment_vars,
             network_name,
-            frp_config_path
+            f"/data/frp/{server_id}/client.toml"
         )
         
         # Write Docker Compose file
@@ -1487,8 +1475,6 @@ def get_directory_size(directory):
         return total_size
     except Exception:
         return 0
-
-# ... existing code ...
 
 # Add new endpoint for complete server deletion
 @app.route('/api/containers/<server_id>/delete', methods=['DELETE'])

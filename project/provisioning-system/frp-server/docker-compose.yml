@@ -6,16 +6,15 @@ services:
     container_name: frp-instance-manager
     restart: unless-stopped
     ports:
-      - "7000:7000/tcp"       # frps control port
-      - "7000:7000/udp"
-      - "7500:7500"          # frps dashboard
       - "7001:7001"           # Instance Manager API (HTTP)
-      - "30000-35000:30000-35000/tcp"  # Port range for tunneled game traffic
-      - "30000-35000:30000-35000/udp"  # Port range for tunneled game traffic (UDP)
+      - "443:443"             # Instance Manager API (HTTPS, if enabled)
+      - "7100-7120:7100-7120" # Per-instance frps control ports
+      - "30000-30050:30000-30050/tcp"  # Port range for tunneled game traffic (TCP)
+      - "30000-30050:30000-30050/udp"  # Port range for tunneled game traffic (UDP)
     environment:
       # === REQUIRED: Update these values ===
-      - PUBLIC_HOST_IP=69.164.196.13  #  Actual host/LAN IP
-      - PUBLIC_IP=${PUBLIC_IP:-0.0.0.0}  # For server binding (optional, defaults to 0.0.0.0)
+      - PUBLIC_HOST_IP=69.164.196.13
+      - PUBLIC_IP=${PUBLIC_IP:-0.0.0.0}
       - INTERNAL_SERVER_HOST=69.164.196.13
       - FRP_SERVER_HOST=69.164.196.13
       - API_TOKEN=ZulFyyu3FraFfIuDxQe73pJJPXxuyOOrk2tqQKL7HwM3XGDKTQp7oH4v6gcgP86Kir79uicVJIZtj79dy4Q1svSrSxT2UDWGcejb2am3p1j7Wl2Rj5jKhuErIdi2jYB
@@ -24,25 +23,22 @@ services:
       - USE_HTTPS=${USE_HTTPS:-false}
       - SSL_CERT_PATH=/certs/server.crt
       - SSL_KEY_PATH=/certs/server.key
-      
       # === Legacy Auth (DISABLED) ===
       - LEGACY_AUTH_ENABLED=false
-      
       # === Instance Manager Configuration ===
       - SERVER_PORT=7001
       - HTTPS_PORT=443
       - FRP_BINARY=/usr/local/bin/frps
       - BASE_DATA_DIR=/data/frp-instances
-      
       # === Flask Settings ===
       - FLASK_ENV=production
     volumes:
       - frp_instances_data:/data/frp-instances
       - frp_logs:/var/log/frp
-      - ./certs:/certs:ro        # SSL certificates (optional, create directory if using HTTPS)
+      - ./certs:/certs:ro
     networks:
       - frp_network
-      - auth-service_auth-network  # Connect to the auth service network
+      - auth-service_auth-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:7001/health"]
       interval: 30s
@@ -59,4 +55,4 @@ networks:
   frp_network:
     driver: bridge
   auth-service_auth-network:
-    external: true  # Use the existing auth service network
+    external: true
