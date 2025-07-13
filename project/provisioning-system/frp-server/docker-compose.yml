@@ -7,7 +7,6 @@ services:
     restart: unless-stopped
     ports:
       - "7001:7001"           # Instance Manager API (HTTP)
-      - "443:443"             # Instance Manager API (HTTPS, if enabled)
       - "7100-7120:7100-7120" # Per-instance frps control ports
       - "30000-30050:30000-30050/tcp"  # Port range for tunneled game traffic (TCP)
       - "30000-30050:30000-30050/udp"  # Port range for tunneled game traffic (UDP)
