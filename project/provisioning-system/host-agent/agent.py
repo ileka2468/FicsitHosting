@@ -141,9 +141,9 @@ def generate_docker_compose_config(
             f"{server_id}_frpc": {
                 "image": f"fatedier/frpc:{frpc_tag}",
                 "container_name": f"{server_id}_frpc",
-                # mount the *.toml* file read‑only
-                "volumes": [f"{frp_config_path}:/frpc/frpc.toml:ro"],
-                "command": ["-c", "/frpc/frpc.toml"],
+                # mount the *.toml* file read‑only to /etc/frp/frpc.toml
+                "volumes": [f"{frp_config_path}:/etc/frp/frpc.toml:ro"],
+                "command": ["-c", "/etc/frp/frpc.toml"],
                 "restart": "unless-stopped",
                 "depends_on": [server_id],
                 "networks": [network_name]
@@ -538,13 +538,19 @@ def spawn_container():
         frps_port = data.get('frpsPort')
         frps_token = data.get('frpsToken')
 
-        # Generate Docker Compose configuration
+        # 1️⃣ Prepare FRP client config before generating compose
+        cfg_path = prepare_rathole_client_config(
+            server_id, server_name, game_port, beacon_port
+        )
+        if not cfg_path:
+            raise Exception("Failed to prepare FRP client config; aborting spawn")
+        # 2️⃣ Generate Docker Compose configuration
         compose_config = generate_docker_compose_config(
             server_id, server_name, game_port, beacon_port,
             ram_allocation, cpu_allocation, max_players,
             server_password, environment_vars,
             network_name,
-            f"/data/frp/{server_id}/client.toml"
+            frp_config_path=cfg_path
         )
         
         # Write Docker Compose file
