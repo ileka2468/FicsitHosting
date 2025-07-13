@@ -141,15 +141,19 @@ def generate_docker_compose_config(
             f"{server_id}_frpc": {
                 "image": f"fatedier/frpc:{frpc_tag}",
                 "container_name": f"{server_id}_frpc",
-                # mount the *.toml* file read‑only to /etc/frp/frpc.toml
-                "volumes": [f"{frp_config_path}:/etc/frp/frpc.toml:ro"],
+                # Use named volume for frpc config sharing
+                "volumes": [
+                    "agent_frp_configs:/data/frp",
+                    f"/data/frp/frpc_{server_id}.toml:/etc/frp/frpc.toml:ro"
+                ],
                 "command": ["-c", "/etc/frp/frpc.toml"],
                 "restart": "unless-stopped",
                 "depends_on": [server_id],
                 "networks": [network_name]
             }
         },
-        "networks": {network_name: {"driver": "bridge"}}
+        "networks": {network_name: {"driver": "bridge"}},
+        "volumes": {"agent_frp_configs": {"external": True}}
     }
     return compose
 
