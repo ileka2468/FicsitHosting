@@ -27,3 +27,7 @@ dist-ssr
 # Python cache
 __pycache__/
 *.pyc
+
+# Host agent runtime data
+provisioning-system/host-agent/data/
+provisioning-system/host-agent/frp-logs/*.log

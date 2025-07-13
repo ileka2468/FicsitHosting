@@ -144,7 +144,7 @@ def generate_docker_compose_config(
                 # Use named volume for frpc config sharing
                 "volumes": [
                     "agent_frp_configs:/data/frp",
-                    f"/data/frp/frpc_{server_id}.toml:/etc/frp/frpc.toml:ro"
+                    f"/data/frp/{server_id}/client.toml:/etc/frp/frpc.toml:ro"
                 ],
                 "command": ["-c", "/etc/frp/frpc.toml"],
                 "restart": "unless-stopped",
