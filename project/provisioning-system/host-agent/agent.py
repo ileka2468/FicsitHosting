@@ -87,9 +87,13 @@ def generate_docker_compose_config(
         max_players, server_password,
         environment_vars,
         network_name,
-        frp_config_path
+        frp_config_path,
+        frpc_tag="v0.63.0"          # keep client‑and‑server tags in sync
 ):
-    """Compose file that keeps container & public ports identical, and spawns frpc as a sidecar container."""
+    """
+    Compose file that keeps container ↔ public ports identical and
+    spawns frpc as a side‑car container.
+    """
 
     ram_allocation = ram_allocation or 4
     cpu_allocation = cpu_allocation or 2
@@ -108,7 +112,6 @@ def generate_docker_compose_config(
     env_vars.update(environment_vars or {})
 
     compose = {
-        "version": "3.8",
         "services": {
             server_id: {
                 "image": "wolveix/satisfactory-server:latest",
@@ -136,10 +139,11 @@ def generate_docker_compose_config(
                 }
             },
             f"{server_id}_frpc": {
-                "image": "fatedier/frpc:0.57.0",
+                "image": f"fatedier/frpc:{frpc_tag}",
                 "container_name": f"{server_id}_frpc",
-                "volumes": [f"{frp_config_path}:/frpc/frpc.ini:ro"],
-                "command": ["frpc", "-c", "/frpc/frpc.ini"],
+                # mount the *.toml* file read‑only
+                "volumes": [f"{frp_config_path}:/frpc/frpc.toml:ro"],
+                "command": ["-c", "/frpc/frpc.toml"],
                 "restart": "unless-stopped",
                 "depends_on": [server_id],
                 "networks": [network_name]
@@ -148,6 +152,7 @@ def generate_docker_compose_config(
         "networks": {network_name: {"driver": "bridge"}}
     }
     return compose
+
 
 
 def get_auth_headers():

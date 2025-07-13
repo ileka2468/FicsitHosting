@@ -1,0 +1,49 @@
+networks:
+  net_srv_ileka2468_99481dc0:
+    driver: bridge
+services:
+  srv_ileka2468_99481dc0:
+    container_name: srv_ileka2468_99481dc0
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 8G
+        reservations:
+          memory: 4G
+    environment:
+      AUTOSAVENUM: '5'
+      MAXPLAYERS: '10'
+      PGID: '1000'
+      PUID: '1000'
+      SERVERGAMEPORT: '30000'
+      SERVERMESSAGINGPORT: '30001'
+      SKIPUPDATE: 'false'
+      STEAMBETA: 'false'
+      TIMEOUT: '30'
+    hostname: srv_ileka2468_99481dc0
+    image: wolveix/satisfactory-server:latest
+    networks:
+    - net_srv_ileka2468_99481dc0
+    ports:
+    - 30000:30000/udp
+    - 30000:30000/tcp
+    - 30001:30001/tcp
+    restart: unless-stopped
+    volumes:
+    - ./data/srv_ileka2468_99481dc0:/config
+  srv_ileka2468_99481dc0_frpc:
+    command:
+    - frpc
+    - -c
+    - /frpc/frpc.ini
+    container_name: srv_ileka2468_99481dc0_frpc
+    depends_on:
+    - srv_ileka2468_99481dc0
+    image: fatedier/frpc:0.57.0
+    networks:
+    - net_srv_ileka2468_99481dc0
+    restart: unless-stopped
+    volumes:
+    - /data/frp/srv_ileka2468_99481dc0/client.toml:/frpc/frpc.ini:ro
+version: '3.8'

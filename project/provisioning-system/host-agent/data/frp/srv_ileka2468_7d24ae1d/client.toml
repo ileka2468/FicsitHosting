@@ -1,0 +1,24 @@
+
+[common]
+server_addr = 69.164.196.13
+server_port = 7000
+token       = ZulFyyu3FraFfIuDxQe73pJJPXxuyOOrk2tqQKL7HwM3XGDKTQp7oH4v6gcgP86Kir79uicVJIZtj79dy4Q1svSrSxT2UDWGcejb2am3p1j7Wl2Rj5jKhuErIdi2jYB
+tls_enable  = true
+
+[srv_ileka2468_7d24ae1d_game_tcp]
+type        = tcp
+local_ip    = 172.22.0.3
+local_port  = 30020
+remote_port = 40000
+
+[srv_ileka2468_7d24ae1d_game_udp]
+type        = udp
+local_ip    = 172.22.0.3
+local_port  = 30020
+remote_port = 40000
+
+[srv_ileka2468_7d24ae1d_query]
+type        = tcp
+local_ip    = 172.22.0.3
+local_port  = 30021
+remote_port = 40001
