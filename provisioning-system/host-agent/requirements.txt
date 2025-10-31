@@ -1,0 +1,6 @@
+flask
+psutil
+docker
+requests
+python-dotenv
+pyyaml
